@@ -1,0 +1,69 @@
+import 'package:app/features/auth/domain/entities/user_entity.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class SupabaseAuthDataSource {
+  const SupabaseAuthDataSource(this._client);
+  final SupabaseClient _client;
+
+  Future<UserEntity> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+    return _mapUser(response.user!);
+  }
+
+  Future<UserEntity> signUpWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {'display_name': displayName},
+    );
+    return _mapUser(response.user!);
+  }
+
+  Future<void> signOut() async {
+    await _client.auth.signOut();
+  }
+
+  UserEntity? getCurrentUser() {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    return _mapUser(user);
+  }
+
+  Stream<UserEntity?> authStateChanges() {
+    return _client.auth.onAuthStateChange.map((event) {
+      final user = event.session?.user;
+      if (user == null) return null;
+      return _mapUser(user);
+    });
+  }
+
+  Future<void> signInWithGoogle() async {
+    await _client.auth.signInWithOAuth(OAuthProvider.google);
+  }
+
+  Future<void> signInWithApple() async {
+    await _client.auth.signInWithOAuth(OAuthProvider.apple);
+  }
+
+  UserEntity _mapUser(User user) {
+    return UserEntity(
+      id: user.id,
+      email: user.email ?? '',
+      displayName:
+          user.userMetadata?['display_name'] as String? ??
+          user.email?.split('@').first ??
+          '',
+      avatarUrl: user.userMetadata?['avatar_url'] as String?,
+    );
+  }
+}
