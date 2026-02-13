@@ -1,3 +1,4 @@
+import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
@@ -15,6 +16,9 @@ class GroupDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Activate realtime subscription for group members
+    ref.listen(realtimeGroupMembersProvider(groupId), (prev, next) {});
+
     final groupAsync = ref.watch(groupDetailProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
@@ -135,6 +139,18 @@ class GroupDetailScreen extends ConsumerWidget {
                   subtitle: const Text('查看與管理群組消費'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/groups/$groupId/expenses'),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Balances entry
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: const Text('帳務總覽'),
+                  subtitle: const Text('查看欠款與結算'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/groups/$groupId/balances'),
                 ),
               ),
               const SizedBox(height: 24),

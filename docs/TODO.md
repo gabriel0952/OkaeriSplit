@@ -119,32 +119,34 @@
 
 ---
 
-## Milestone 4: 結算 & Dashboard
+## Milestone 4: 結算 & Dashboard（4.1~4.4 ✅）
 
 **目標**：使用者可查看欠款、標記付款、在 Dashboard 看到個人總覽
 
-### 4.1 結算 Domain Layer
-- [ ] `Settlement` entity、`Balance` entity
-- [ ] `SettlementRepository` abstract class
-- [ ] Use cases：`GetBalances`、`MarkSettled`
+### 4.1 結算 Domain Layer ✅
+- [x] `SettlementEntity`、`BalanceEntity`、`OverallBalanceEntity`（plain class，遵循現有模式）
+- [x] `SettlementRepository` abstract class
+- [x] Use cases：`GetBalances`、`GetOverallBalances`、`GetSettlements`、`MarkSettled`
 
-### 4.2 結算 Data Layer
-- [ ] `SettlementModel`（freezed）、`BalanceModel`（freezed）
-- [ ] `SupabaseSettlementDataSource`：呼叫 `get_user_balances` RPC、settlements CRUD
-- [ ] `SettlementRepositoryImpl`
+### 4.2 結算 Data Layer ✅
+- [x] `SupabaseSettlementDataSource`：`get_user_balances` / `get_overall_balances` RPC、settlements CRUD
+- [x] `SettlementRepositoryImpl`（try-catch → `AppResult<T>`）
 
-### 4.3 結算 Presentation Layer
-- [ ] `BalanceScreen`：群組內欠款總覽（誰欠誰多少）
-- [ ] `SettlementHistoryScreen`：結算歷史
-- [ ] 手動標記已付款功能（from_user → to_user）
-- [ ] `BalanceCard` widget、`DebtRow` widget
-- [ ] Riverpod providers：`balancesProvider`、`settlementsProvider`
+### 4.3 結算 Presentation Layer ✅
+- [x] `BalanceScreen`：群組內欠款總覽（帳務摘要卡 + 成員明細）
+- [x] `SettlementHistoryScreen`：結算歷史（含空狀態、下拉刷新）
+- [x] 手動標記已付款功能（確認 Dialog → markSettled → invalidate）
+- [x] `BalanceCard`、`DebtRow`、`SettlementCard` widget
+- [x] Riverpod providers：`balancesProvider`、`settlementsProvider`、`overallBalancesProvider`
+- [x] 路由：`/groups/:groupId/balances`、`/groups/:groupId/settlements`
+- [x] `GroupDetailScreen` 新增「帳務總覽」入口
 
-### 4.4 Dashboard
-- [ ] `DashboardScreen`：跨群組個人帳務總覽（呼叫 `get_overall_balances` RPC）
-- [ ] `BalanceSummaryCard` widget：總欠款/總應收
-- [ ] `RecentExpenseList` widget：最近消費
-- [ ] `overallBalanceProvider`
+### 4.4 Dashboard ✅
+- [x] `DashboardScreen`：跨群組個人帳務總覽（替換 placeholder）
+- [x] `BalanceSummaryCard` widget：淨額/應收/應付
+- [x] `GroupBalanceRow` widget：各群組帳務列表（可點擊進入）
+- [x] `RecentExpenseList` widget：最近 10 筆消費（含分類 icon）
+- [x] `overallBalancesProvider`、`recentExpensesProvider`
 
 ### 4.5 離線快取 & 同步
 - [ ] Hive box 結構建立（groups、expenses、balances、pending_sync、user_profile）
@@ -152,17 +154,28 @@
 - [ ] 背景同步服務：pending_sync queue 處理
 - [ ] 離線狀態 UI 提示
 
-### 4.6 Realtime 訂閱
-- [ ] 群組消費即時更新（Supabase Realtime stream）
-- [ ] 群組成員變更即時更新
-- [ ] 進入/離開群組詳情頁自動管理訂閱
+### 4.6 Realtime 訂閱 ✅
+- [x] 群組消費即時更新（Supabase Realtime stream）
+- [x] 群組成員變更即時更新
+- [x] 結算變更即時更新
+- [x] 進入/離開群組詳情頁自動管理訂閱（`ref.onDispose` 清理 channel）
+- [x] 消費詳情頁即時同步（從 expensesProvider 衍生，共用 realtime 通道）
 
-### 4.7 基本測試
-- [ ] Unit tests：均分計算、淨額計算邏輯
-- [ ] Repository tests：mock data source
-- [ ] Widget tests：關鍵 screens
+### 4.7 基本測試 ✅
+- [x] Unit tests：均分計算、自訂比例計算、指定金額驗證（18 tests）
+- [x] Unit tests：淨額計算邏輯（7 tests）
+- [x] Repository tests：mock data source（5 tests）
+- [x] Widget tests：SplitSummary 渲染 & badge 顯示（6 tests）
 
-**交付物**：完整 MVP — 可查看欠款、標記付款、Dashboard 總覽、離線快取、即時同步
+### 4.8 自訂比例 / 指定金額分帳（P1）✅
+- [x] `SplitCalculator` 工具類：均分、自訂比例、指定金額計算邏輯
+- [x] `AddExpenseScreen` SegmentedButton 切換分帳模式（均分 / 自訂比例 / 指定金額）
+- [x] 自訂比例：輸入比例數字，即時計算分配金額
+- [x] 指定金額：輸入各人金額，驗證加總是否等於總金額
+- [x] 編輯消費時同步更新 splits（完整 update chain）
+- [x] `SplitSummary` 顯示分帳類型 badge
+
+**交付物**：4.1~4.4 + 4.6~4.8 完成 — 可查看欠款、標記付款、Dashboard 總覽、Realtime 即時同步、自訂分帳、40 項測試全過；4.5 離線快取待實作
 
 ---
 
@@ -178,3 +191,5 @@
 | 欠款總覽 | M4 | 4.3 BalanceScreen |
 | 手動標記已付款 | M4 | 4.3 標記付款 |
 | 基本 Dashboard | M4 | 4.4 Dashboard |
+| 自訂比例 / 指定金額分帳（P1） | M4 | 4.8 自訂分帳 |
+| Realtime 即時同步 | M4 | 4.6 Realtime 訂閱 |

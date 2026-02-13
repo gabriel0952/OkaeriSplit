@@ -1,3 +1,4 @@
+import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
@@ -14,6 +15,9 @@ class ExpenseListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Activate realtime subscription for expenses
+    ref.listen(realtimeExpensesProvider(groupId), (prev, next) {});
+
     final expensesAsync = ref.watch(expensesProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
 

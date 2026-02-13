@@ -25,6 +25,7 @@ abstract class ExpenseRepository {
     required String description,
     String? note,
     required DateTime expenseDate,
+    List<Map<String, dynamic>>? splits,
   });
 
   Future<AppResult<void>> deleteExpense(String expenseId);

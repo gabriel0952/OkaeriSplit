@@ -1,3 +1,4 @@
+import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
@@ -21,7 +22,15 @@ class ExpenseDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final expenseAsync = ref.watch(expenseDetailProvider(expenseId));
+    // Keep the realtime subscription alive so that expensesProvider gets
+    // invalidated when another device changes data.
+    ref.listen(realtimeExpensesProvider(groupId), (prev, next) {});
+
+    // expenseDetailLiveProvider watches expensesProvider(groupId) internally.
+    // When the realtime callback invalidates expensesProvider, Riverpod's
+    // dependency graph propagates the invalidation here automatically.
+    final liveKey = (groupId: groupId, expenseId: expenseId);
+    final expenseAsync = ref.watch(expenseDetailLiveProvider(liveKey));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
 
@@ -31,7 +40,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
         loading: () => const AppLoadingWidget(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
-          onRetry: () => ref.invalidate(expenseDetailProvider(expenseId)),
+          onRetry: () => ref.invalidate(expenseDetailLiveProvider(liveKey)),
         ),
         data: (expense) {
           final members = membersAsync.valueOrNull ?? [];

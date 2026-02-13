@@ -1,4 +1,5 @@
 import 'package:app/core/constants/app_constants.dart';
+import 'package:app/features/expenses/domain/utils/split_calculator.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
@@ -37,12 +38,35 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   bool _isSubmitting = false;
   bool _isLoaded = false;
 
+  SplitType _splitType = SplitType.equal;
+  final Map<String, TextEditingController> _ratioControllers = {};
+  final Map<String, TextEditingController> _fixedAmountControllers = {};
+
   @override
   void dispose() {
     _amountController.dispose();
     _descriptionController.dispose();
     _noteController.dispose();
+    for (final c in _ratioControllers.values) {
+      c.dispose();
+    }
+    for (final c in _fixedAmountControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _ensureControllers(List<GroupMemberEntity> members) {
+    for (final member in members) {
+      _ratioControllers.putIfAbsent(
+        member.userId,
+        () => TextEditingController(text: '1'),
+      );
+      _fixedAmountControllers.putIfAbsent(
+        member.userId,
+        () => TextEditingController(),
+      );
+    }
   }
 
   @override
@@ -74,6 +98,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               _expenseDate = expense.expenseDate;
               _paidBy = expense.paidBy;
               _selectedMemberIds = expense.splits.map((s) => s.userId).toSet();
+              if (expense.splits.isNotEmpty) {
+                _splitType = expense.splits.first.splitType;
+              }
               _isLoaded = true;
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => setState(() {}),
@@ -101,6 +128,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           if (_selectedMemberIds.isEmpty) {
             _selectedMemberIds = members.map((m) => m.userId).toSet();
           }
+          _ensureControllers(members);
 
           final currency =
               groupAsync.valueOrNull?.currency ?? AppConstants.defaultCurrency;
@@ -117,7 +145,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     String currency,
   ) {
     final amount = double.tryParse(_amountController.text) ?? 0;
-    final splitAmounts = _calculateSplits(amount, _selectedMemberIds.length);
 
     return Form(
       key: _formKey,
@@ -222,43 +249,47 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           const Divider(),
           const SizedBox(height: 8),
 
-          // Split members
+          // Split type selector
           Text(
-            '分帳成員（均分）',
+            '分帳方式',
             style: Theme.of(
               context,
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          ...members.map((member) {
-            final isSelected = _selectedMemberIds.contains(member.userId);
-            final index = _selectedMemberIds.toList().indexOf(member.userId);
-            final splitAmount =
-                isSelected && splitAmounts.isNotEmpty && index >= 0
-                ? splitAmounts[index]
-                : 0.0;
+          SegmentedButton<SplitType>(
+            segments: const [
+              ButtonSegment(value: SplitType.equal, label: Text('均分')),
+              ButtonSegment(
+                value: SplitType.customRatio,
+                label: Text('自訂比例'),
+              ),
+              ButtonSegment(
+                value: SplitType.fixedAmount,
+                label: Text('指定金額'),
+              ),
+            ],
+            selected: {_splitType},
+            onSelectionChanged: (selected) {
+              setState(() => _splitType = selected.first);
+            },
+          ),
+          const SizedBox(height: 16),
 
-            return CheckboxListTile(
-              value: isSelected,
-              onChanged: (checked) {
-                setState(() {
-                  if (checked == true) {
-                    _selectedMemberIds.add(member.userId);
-                  } else {
-                    if (_selectedMemberIds.length > 1) {
-                      _selectedMemberIds.remove(member.userId);
-                    }
-                  }
-                });
-              },
-              title: Text(member.displayName),
-              subtitle: isSelected && amount > 0
-                  ? Text('\$${splitAmount.toStringAsFixed(2)}')
-                  : null,
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-            );
-          }),
+          // Split members
+          Text(
+            '分帳成員',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          ..._buildMemberSplitList(members, amount),
+
+          // Fixed amount validation hint
+          if (_splitType == SplitType.fixedAmount && amount > 0)
+            _buildFixedAmountHint(amount),
+
           const SizedBox(height: 24),
 
           // Submit
@@ -277,34 +308,280 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     );
   }
 
-  List<double> _calculateSplits(double totalAmount, int memberCount) {
-    if (memberCount <= 0 || totalAmount <= 0) return [];
+  List<Widget> _buildMemberSplitList(
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    switch (_splitType) {
+      case SplitType.equal:
+        return _buildEqualSplitList(members, amount);
+      case SplitType.customRatio:
+        return _buildRatioSplitList(members, amount);
+      case SplitType.fixedAmount:
+        return _buildFixedAmountSplitList(members, amount);
+    }
+  }
 
-    final baseAmount = (totalAmount * 100 ~/ memberCount).toDouble() / 100;
-    final remainder =
-        ((totalAmount * 100).round() - (baseAmount * 100).round() * memberCount)
-            .toDouble() /
-        100;
+  List<Widget> _buildEqualSplitList(
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    final splitAmounts = SplitCalculator.calculateEqualSplits(
+      amount,
+      _selectedMemberIds.length,
+    );
 
-    return List.generate(memberCount, (i) {
-      if (i == 0)
-        return double.parse((baseAmount + remainder).toStringAsFixed(2));
-      return baseAmount;
-    });
+    return members.map((member) {
+      final isSelected = _selectedMemberIds.contains(member.userId);
+      final index = _selectedMemberIds.toList().indexOf(member.userId);
+      final splitAmount = isSelected && splitAmounts.isNotEmpty && index >= 0
+          ? splitAmounts[index]
+          : 0.0;
+
+      return CheckboxListTile(
+        value: isSelected,
+        onChanged: (checked) {
+          setState(() {
+            if (checked == true) {
+              _selectedMemberIds.add(member.userId);
+            } else if (_selectedMemberIds.length > 1) {
+              _selectedMemberIds.remove(member.userId);
+            }
+          });
+        },
+        title: Text(member.displayName),
+        subtitle:
+            isSelected && amount > 0
+                ? Text('\$${splitAmount.toStringAsFixed(2)}')
+                : null,
+        controlAffinity: ListTileControlAffinity.leading,
+        dense: true,
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildRatioSplitList(
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    // Build ratios map from controllers
+    final ratios = <String, int>{};
+    for (final id in _selectedMemberIds) {
+      final text = _ratioControllers[id]?.text ?? '1';
+      ratios[id] = int.tryParse(text) ?? 1;
+    }
+
+    final ratioSplits =
+        amount > 0
+            ? SplitCalculator.calculateRatioSplits(amount, ratios)
+            : <String, double>{};
+
+    return members.map((member) {
+      final isSelected = _selectedMemberIds.contains(member.userId);
+      final splitAmount = ratioSplits[member.userId] ?? 0.0;
+
+      return CheckboxListTile(
+        value: isSelected,
+        onChanged: (checked) {
+          setState(() {
+            if (checked == true) {
+              _selectedMemberIds.add(member.userId);
+            } else if (_selectedMemberIds.length > 1) {
+              _selectedMemberIds.remove(member.userId);
+            }
+          });
+        },
+        title: Row(
+          children: [
+            Expanded(child: Text(member.displayName)),
+            if (isSelected)
+              SizedBox(
+                width: 64,
+                child: TextField(
+                  controller: _ratioControllers[member.userId],
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+          ],
+        ),
+        subtitle:
+            isSelected && amount > 0
+                ? Text('\$${splitAmount.toStringAsFixed(2)}')
+                : null,
+        controlAffinity: ListTileControlAffinity.leading,
+        dense: true,
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildFixedAmountSplitList(
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    return members.map((member) {
+      final isSelected = _selectedMemberIds.contains(member.userId);
+
+      return CheckboxListTile(
+        value: isSelected,
+        onChanged: (checked) {
+          setState(() {
+            if (checked == true) {
+              _selectedMemberIds.add(member.userId);
+            } else if (_selectedMemberIds.length > 1) {
+              _selectedMemberIds.remove(member.userId);
+            }
+          });
+        },
+        title: Row(
+          children: [
+            Expanded(child: Text(member.displayName)),
+            if (isSelected)
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: _fixedAmountControllers[member.userId],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(),
+                    prefixText: '\$ ',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+          ],
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        dense: true,
+      );
+    }).toList();
+  }
+
+  Widget _buildFixedAmountHint(double amount) {
+    final amounts = _getFixedAmountsMap();
+    final diff = SplitCalculator.fixedAmountDifference(amount, amounts);
+
+    if (diff.abs() < 0.01) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          '金額分配正確',
+          style: TextStyle(color: Colors.green.shade700, fontSize: 13),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        diff > 0
+            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
+            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+      ),
+    );
+  }
+
+  Map<String, double> _getFixedAmountsMap() {
+    final amounts = <String, double>{};
+    for (final id in _selectedMemberIds) {
+      final text = _fixedAmountControllers[id]?.text ?? '';
+      amounts[id] = double.tryParse(text) ?? 0;
+    }
+    return amounts;
+  }
+
+  List<Map<String, dynamic>> _buildSplitsPayload(double amount) {
+    final memberIds = _selectedMemberIds.toList();
+
+    switch (_splitType) {
+      case SplitType.equal:
+        final splitAmounts = SplitCalculator.calculateEqualSplits(
+          amount,
+          memberIds.length,
+        );
+        return List.generate(
+          memberIds.length,
+          (i) => {
+            'user_id': memberIds[i],
+            'amount': splitAmounts[i],
+            'split_type': 'equal',
+          },
+        );
+
+      case SplitType.customRatio:
+        final ratios = <String, int>{};
+        for (final id in memberIds) {
+          ratios[id] = int.tryParse(_ratioControllers[id]?.text ?? '1') ?? 1;
+        }
+        final ratioSplits = SplitCalculator.calculateRatioSplits(
+          amount,
+          ratios,
+        );
+        return memberIds
+            .map(
+              (id) => {
+                'user_id': id,
+                'amount': ratioSplits[id] ?? 0.0,
+                'split_type': 'custom_ratio',
+              },
+            )
+            .toList();
+
+      case SplitType.fixedAmount:
+        final amounts = _getFixedAmountsMap();
+        return memberIds
+            .map(
+              (id) => {
+                'user_id': id,
+                'amount': amounts[id] ?? 0.0,
+                'split_type': 'fixed_amount',
+              },
+            )
+            .toList();
+    }
   }
 
   Future<void> _handleSubmit(String currency) async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMemberIds.isEmpty) return;
 
+    final amount = double.parse(_amountController.text);
+
+    // Validate fixed amounts
+    if (_splitType == SplitType.fixedAmount) {
+      final amounts = _getFixedAmountsMap();
+      if (!SplitCalculator.validateFixedAmounts(amount, amounts)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('指定金額加總必須等於總金額')),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
-    final amount = double.parse(_amountController.text);
     final categorySnake = SupabaseExpenseDataSource.toSnakeCase(_category.name);
-    final splitAmounts = _calculateSplits(amount, _selectedMemberIds.length);
-    final memberIds = _selectedMemberIds.toList();
 
     if (widget.isEditing) {
+      final splits = _buildSplitsPayload(amount);
       final updateExpense = ref.read(updateExpenseUseCaseProvider);
       final result = await updateExpense(
         expenseId: widget.expenseId!,
@@ -315,6 +592,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             ? null
             : _noteController.text.trim(),
         expenseDate: _expenseDate,
+        splits: splits,
       );
 
       if (!mounted) return;
@@ -333,14 +611,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         },
       );
     } else {
-      final splits = List.generate(
-        memberIds.length,
-        (i) => {
-          'user_id': memberIds[i],
-          'amount': splitAmounts[i],
-          'split_type': 'equal',
-        },
-      );
+      final splits = _buildSplitsPayload(amount);
 
       final createExpense = ref.read(createExpenseUseCaseProvider);
       final result = await createExpense(

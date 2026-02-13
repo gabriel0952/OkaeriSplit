@@ -66,3 +66,33 @@ final expenseDetailProvider = FutureProvider.family<ExpenseEntity, String>((
     (expense) => expense,
   );
 });
+
+/// Derives expense detail from the already-live [expensesProvider].
+///
+/// Since [expensesProvider] is invalidated directly by the realtime callback
+/// (and this is proven to work for the list screen), watching it here gives
+/// the detail screen automatic updates with zero extra plumbing.
+///
+/// Falls back to a direct API call if the expense isn't found in the list
+/// (e.g. navigated via deep link before the list loaded).
+final expenseDetailLiveProvider = FutureProvider.family<ExpenseEntity,
+    ({String groupId, String expenseId})>((ref, params) async {
+  // This creates a Riverpod dependency: when expensesProvider is invalidated
+  // by the realtime callback, this provider automatically re-executes.
+  final expensesAsync = ref.watch(expensesProvider(params.groupId));
+
+  // Try to find the expense in the already-fetched list.
+  final expenses = expensesAsync.valueOrNull;
+  if (expenses != null) {
+    final match = expenses.where((e) => e.id == params.expenseId);
+    if (match.isNotEmpty) return match.first;
+  }
+
+  // Fallback: list not loaded yet or expense not found — fetch directly.
+  final getExpenseDetail = ref.watch(getExpenseDetailUseCaseProvider);
+  final result = await getExpenseDetail(params.expenseId);
+  return result.fold(
+    (failure) => throw Exception(failure.message),
+    (expense) => expense,
+  );
+});

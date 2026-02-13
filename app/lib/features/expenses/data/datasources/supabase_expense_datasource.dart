@@ -63,7 +63,25 @@ class SupabaseExpenseDataSource {
     required String description,
     String? note,
     required DateTime expenseDate,
+    List<Map<String, dynamic>>? splits,
   }) async {
+    // Update splits BEFORE the expenses row so that when the expenses UPDATE
+    // triggers a Realtime event and listeners refetch, the new splits are
+    // already committed in the DB.
+    if (splits != null) {
+      await _client.from('expense_splits').delete().eq('expense_id', expenseId);
+      await _client.from('expense_splits').insert(
+        splits
+            .map((s) => {
+                  'expense_id': expenseId,
+                  'user_id': s['user_id'],
+                  'amount': s['amount'],
+                  'split_type': s['split_type'],
+                })
+            .toList(),
+      );
+    }
+
     await _client
         .from('expenses')
         .update({

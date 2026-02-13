@@ -66,6 +66,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     required String description,
     String? note,
     required DateTime expenseDate,
+    List<Map<String, dynamic>>? splits,
   }) async {
     try {
       await _dataSource.updateExpense(
@@ -75,6 +76,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         description: description,
         note: note,
         expenseDate: expenseDate,
+        splits: splits,
       );
       return const Right(null);
     } catch (e) {

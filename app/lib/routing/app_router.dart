@@ -9,6 +9,8 @@ import 'package:app/features/groups/presentation/screens/create_group_screen.dar
 import 'package:app/features/groups/presentation/screens/group_detail_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_list_screen.dart';
 import 'package:app/features/profile/presentation/screens/profile_screen.dart';
+import 'package:app/features/settlements/presentation/screens/balance_screen.dart';
+import 'package:app/features/settlements/presentation/screens/settlement_history_screen.dart';
 import 'package:app/features/shell/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -86,6 +88,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       GoRoute(
                         path: 'add-expense',
                         builder: (_, state) => AddExpenseScreen(
+                          groupId: state.pathParameters['groupId']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'balances',
+                        builder: (_, state) => BalanceScreen(
+                          groupId: state.pathParameters['groupId']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'settlements',
+                        builder: (_, state) => SettlementHistoryScreen(
                           groupId: state.pathParameters['groupId']!,
                         ),
                       ),

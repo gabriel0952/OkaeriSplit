@@ -1,0 +1,158 @@
+import 'package:app/core/providers/realtime_provider.dart';
+import 'package:app/core/widgets/app_error_widget.dart';
+import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
+import 'package:app/features/settlements/presentation/widgets/balance_card.dart';
+import 'package:app/features/settlements/presentation/widgets/debt_row.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+class BalanceScreen extends ConsumerWidget {
+  const BalanceScreen({super.key, required this.groupId});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Activate realtime subscription for settlements & balances
+    ref.listen(realtimeSettlementsProvider(groupId), (prev, next) {});
+
+    final balancesAsync = ref.watch(balancesProvider(groupId));
+    final groupAsync = ref.watch(groupDetailProvider(groupId));
+    final currentUser = ref.watch(authStateProvider).valueOrNull;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('帳務總覽'),
+        actions: [
+          IconButton(
+            onPressed: () => context.push('/groups/$groupId/settlements'),
+            icon: const Icon(Icons.history),
+            tooltip: '結算歷史',
+          ),
+        ],
+      ),
+      body: balancesAsync.when(
+        loading: () => const AppLoadingWidget(),
+        error: (error, _) => AppErrorWidget(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(balancesProvider(groupId)),
+        ),
+        data: (balances) {
+          if (balances.isEmpty) {
+            return const Center(
+              child: Text('目前沒有帳務資料'),
+            );
+          }
+
+          final currency = groupAsync.valueOrNull?.currency ?? 'TWD';
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(balancesProvider(groupId));
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                BalanceCard(balances: balances, currency: currency),
+                const SizedBox(height: 24),
+                Text(
+                  '成員明細',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: balances.map((balance) {
+                      final isCurrentUser =
+                          balance.userId == currentUser?.id;
+                      return DebtRow(
+                        balance: balance,
+                        currency: currency,
+                        isCurrentUser: isCurrentUser,
+                        onMarkSettled: () => _handleMarkSettled(
+                          context,
+                          ref,
+                          balance,
+                          currency,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleMarkSettled(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic balance,
+    String currency,
+  ) async {
+    final amount = balance.netBalance.abs();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('確認付款'),
+        content: Text('確定要標記已支付 $currency ${amount.toStringAsFixed(0)} 嗎？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('確認'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Find the creditor (person with highest positive balance)
+    final balances = ref.read(balancesProvider(groupId)).valueOrNull ?? [];
+    final creditors = balances.where((b) => b.netBalance > 0).toList()
+      ..sort((a, b) => b.netBalance.compareTo(a.netBalance));
+
+    if (creditors.isEmpty) return;
+
+    final markSettled = ref.read(markSettledUseCaseProvider);
+    final result = await markSettled(
+      groupId: groupId,
+      fromUser: balance.userId,
+      toUser: creditors.first.userId,
+      amount: amount,
+      currency: currency,
+    );
+
+    if (!context.mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+      },
+      (_) {
+        ref.invalidate(balancesProvider(groupId));
+        ref.invalidate(settlementsProvider(groupId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已標記付款成功')),
+        );
+      },
+    );
+  }
+}
