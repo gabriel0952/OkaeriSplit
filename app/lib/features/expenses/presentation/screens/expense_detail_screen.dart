@@ -1,0 +1,209 @@
+import 'package:app/core/widgets/app_error_widget.dart';
+import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
+import 'package:app/features/expenses/presentation/widgets/split_summary.dart';
+import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+
+class ExpenseDetailScreen extends ConsumerWidget {
+  const ExpenseDetailScreen({
+    super.key,
+    required this.groupId,
+    required this.expenseId,
+  });
+
+  final String groupId;
+  final String expenseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final expenseAsync = ref.watch(expenseDetailProvider(expenseId));
+    final membersAsync = ref.watch(groupMembersProvider(groupId));
+    final currentUser = ref.watch(authStateProvider).valueOrNull;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('消費詳情')),
+      body: expenseAsync.when(
+        loading: () => const AppLoadingWidget(),
+        error: (error, _) => AppErrorWidget(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(expenseDetailProvider(expenseId)),
+        ),
+        data: (expense) {
+          final members = membersAsync.valueOrNull ?? [];
+          final memberMap = {for (final m in members) m.userId: m.displayName};
+          final isOwner = currentUser?.id == expense.paidBy;
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Amount
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Text(
+                        '\$${expense.amount.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.headlineLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        expense.currency,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Info
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _infoRow(context, '描述', expense.description),
+                      if (expense.note != null && expense.note!.isNotEmpty) ...[
+                        const Divider(),
+                        _infoRow(context, '備註', expense.note!),
+                      ],
+                      const Divider(),
+                      _infoRow(context, '分類', expense.category.label),
+                      const Divider(),
+                      _infoRow(
+                        context,
+                        '付款人',
+                        memberMap[expense.paidBy] ?? expense.paidBy,
+                      ),
+                      const Divider(),
+                      _infoRow(
+                        context,
+                        '日期',
+                        DateFormat('yyyy/MM/dd').format(expense.expenseDate),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Split details
+              Text(
+                '分帳明細',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SplitSummary(
+                    splits: expense.splits,
+                    members: members,
+                    currency: expense.currency,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Actions (only for paidBy user)
+              if (isOwner) ...[
+                FilledButton.icon(
+                  onPressed: () =>
+                      context.push('/groups/$groupId/expenses/$expenseId/edit'),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('編輯'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _handleDelete(context, ref),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  icon: const Icon(Icons.delete),
+                  label: const Text('刪除'),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _infoRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('確認刪除'),
+        content: const Text('確定要刪除這筆消費嗎？此操作無法復原。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final deleteExpense = ref.read(deleteExpenseUseCaseProvider);
+    final result = await deleteExpense(expenseId);
+
+    if (!context.mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+      (_) {
+        ref.invalidate(expensesProvider(groupId));
+        context.pop();
+      },
+    );
+  }
+}

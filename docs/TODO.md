@@ -5,110 +5,117 @@
 
 ---
 
-## Milestone 1: 專案初始化 & 基礎建設
+## Milestone 1: 專案初始化 & 基礎建設 ✅
 
 **目標**：專案骨架就位，Auth 流程可跑通
 
 ### 1.1 Flutter 專案初始化
-- [ ] 建立 Flutter 專案，設定 Android minSdk 24
-- [ ] 安裝依賴：`flutter_riverpod`、`go_router`、`freezed`、`fpdart`、`supabase_flutter`、`hive_flutter`、`json_annotation`
-- [ ] 設定 `build_runner` / `freezed` code generation
-- [ ] 建立目錄結構（`core/`、`features/`、`routing/`）
+- [x] 建立 Flutter 專案（`app/`，iOS + Android）
+- [x] 安裝依賴：`flutter_riverpod`、`go_router`、`freezed`、`fpdart`、`supabase_flutter`、`hive_flutter`、`json_annotation`
+- [x] 設定 `build_runner` / `freezed` code generation
+- [x] 建立目錄結構（`core/`、`features/`、`routing/`）
 
 ### 1.2 Supabase 設定 & DB Migration
-- [ ] 建立 Supabase 專案
-- [ ] 執行 DB migration：建立 6 張表（profiles、groups、group_members、expenses、expense_splits、settlements）
-- [ ] 建立 `handle_new_user()` trigger
-- [ ] 建立 `update_updated_at()` trigger
-- [ ] 啟用所有表的 RLS
-- [ ] 建立所有 RLS policies（含 group_members DELETE、expense_splits UPDATE/DELETE）
-- [ ] 建立 RPC functions：`create_group`、`create_expense`、`join_group_by_code`、`get_user_balances`、`get_overall_balances`
-- [ ] 設定 Auth providers（Email、Google、Apple）
+- [x] 建立 Supabase 專案（Tokyo region）
+- [x] 產生 SQL migration 檔（`supabase/migrations/001_initial_schema.sql`）
+  - [x] 6 張表（profiles、groups、group_members、expenses、expense_splits、settlements）
+  - [x] `handle_new_user()` trigger（已修復 search_path）
+  - [x] `update_updated_at()` trigger
+  - [x] 所有表的 RLS + policies
+  - [x] RPC functions：`create_group`、`create_expense`、`join_group_by_code`、`get_user_balances`、`get_overall_balances`
+- [x] 執行 migration 至 Supabase
+- [x] 設定 Auth providers（Email 已啟用，關閉 email confirmation）
 
 ### 1.3 Core 模組
-- [ ] `core/theme/`：Light/Dark theme 設定，iOS Cupertino 風格支援
-- [ ] `core/errors/`：`Failure` class、`Either` typedef
-- [ ] `core/constants/`：Supabase URL/Key、enum 映射
-- [ ] `core/widgets/`：共用 loading/error widgets
+- [x] `core/theme/`：Light/Dark theme 設定，iOS Cupertino 風格支援
+- [x] `core/errors/`：`Failure` sealed class、`AppResult<T>` typedef
+- [x] `core/constants/`：Supabase placeholder URL/Key、ExpenseCategory / GroupType / SplitType enum
+- [x] `core/widgets/`：`AppLoadingWidget`、`AppErrorWidget`
 
 ### 1.4 Auth Feature
-- [ ] `auth/domain/`：User entity、AuthRepository abstract class、SignIn/SignUp/SignOut use cases
-- [ ] `auth/data/`：SupabaseAuthDataSource、AuthRepositoryImpl
-- [ ] `auth/presentation/`：LoginScreen、RegisterScreen、authProvider/authStateProvider
-- [ ] Social login buttons（Google + Apple Sign-In）
-- [ ] 路由守衛：未登入導向 `/login`
+- [x] `auth/domain/`：UserEntity、AuthRepository abstract class、SignIn/SignUp/SignOut/GetCurrentUser use cases
+- [x] `auth/data/`：SupabaseAuthDataSource（含 Google/Apple OAuth）、AuthRepositoryImpl
+- [x] `auth/presentation/`：LoginScreen、RegisterScreen、authProvider/authStateProvider
+- [x] SocialLoginButton widget（Google + Apple Sign-In）
+- [x] 路由守衛：未登入導向 `/login`
 
 ### 1.5 路由 & App Shell
-- [ ] `routing/app_router.dart`：GoRouter 設定（含 auth redirect）
-- [ ] `MainShell`：底部導航（Dashboard / 群組 / 我的）
-- [ ] Placeholder screens for Dashboard、GroupList、Profile
+- [x] `routing/app_router.dart`：GoRouter + StatefulShellRoute（含 auth redirect）
+- [x] `MainShell`：底部導航（總覽 / 群組 / 我的）
+- [x] Placeholder screens：DashboardScreen、GroupListScreen、ProfileScreen
 
-**交付物**：可註冊、登入、登出，底部導航可切換 placeholder 頁面
+**交付物**：✅ `flutter analyze` 零錯誤，App 可啟動顯示 Login，登入後進入 3-tab MainShell
 
 ---
 
-## Milestone 2: 群組管理
+## Milestone 2: 群組管理 ✅
 
 **目標**：使用者可建立群組、透過邀請碼加入群組、查看成員
 
 ### 2.1 群組 Domain Layer
-- [ ] `Group` entity、`GroupMember` entity
-- [ ] `GroupRepository` abstract class
-- [ ] Use cases：`CreateGroup`、`GetGroups`、`JoinGroupByCode`、`LeaveGroup`
+- [x] `GroupEntity`、`GroupMemberEntity`
+- [x] `GroupRepository` abstract class
+- [x] Use cases：`CreateGroup`、`GetGroups`、`GetGroupDetail`、`GetGroupMembers`、`JoinGroupByCode`、`LeaveGroup`
 
 ### 2.2 群組 Data Layer
-- [ ] `GroupModel`（freezed）、`GroupMemberModel`（freezed）
-- [ ] `SupabaseGroupDataSource`：呼叫 `create_group` RPC、`join_group_by_code` RPC、CRUD
-- [ ] `HiveGroupDataSource`：本地快取
-- [ ] `GroupRepositoryImpl`：remote-first read、local-first write
+- [x] `SupabaseGroupDataSource`：呼叫 `create_group` RPC、`join_group_by_code` RPC、CRUD
+- [x] `GroupRepositoryImpl`（暫不做 Hive 快取，M4 再加）
 
 ### 2.3 群組 Presentation Layer
-- [ ] `GroupListScreen`：顯示已加入群組列表
-- [ ] `CreateGroupScreen`：群組名稱、類型選擇、幣別選擇
-- [ ] `GroupDetailScreen`：群組資訊、成員列表、消費列表入口
-- [ ] `JoinGroupDialog`：輸入邀請碼加入
-- [ ] `GroupCard` widget、`MemberAvatar` widget
-- [ ] Riverpod providers：`groupsProvider`、`groupDetailProvider`
+- [x] `GroupListScreen`：顯示已加入群組列表（含空狀態、下拉刷新）
+- [x] `CreateGroupScreen`：群組名稱、類型 SegmentedButton、幣別下拉
+- [x] `GroupDetailScreen`：群組資訊、成員列表、消費列表入口（placeholder）
+- [x] `JoinGroupDialog`：輸入 6 碼邀請碼加入
+- [x] `GroupCard` widget、`MemberAvatar` widget
+- [x] Riverpod providers：`groupsProvider`、`groupDetailProvider`、`groupMembersProvider`
 
 ### 2.4 群組成員管理
-- [ ] 顯示群組邀請碼（可複製分享）
-- [ ] 成員退出群組功能
+- [x] 顯示群組邀請碼（可複製分享）
+- [x] 成員退出群組功能（owner 不可退出）
 
-**交付物**：可建立群組、用邀請碼加入、查看/退出群組、查看成員列表
+### 2.5 路由
+- [x] `/groups/create` → CreateGroupScreen
+- [x] `/groups/:groupId` → GroupDetailScreen
+
+**交付物**：✅ 可建立群組、用邀請碼加入、查看/退出群組、查看成員列表
 
 ---
 
-## Milestone 3: 記帳 & 分帳
+## Milestone 3: 記帳 & 分帳 ✅
 
 **目標**：使用者可在群組內新增消費、均分分帳、查看/編輯/刪除消費
 
 ### 3.1 消費 Domain Layer
-- [ ] `Expense` entity、`ExpenseSplit` entity
-- [ ] `ExpenseRepository` abstract class
-- [ ] Use cases：`CreateExpense`、`GetExpenses`、`UpdateExpense`、`DeleteExpense`
+- [x] `ExpenseEntity`、`ExpenseSplitEntity`
+- [x] `ExpenseRepository` abstract class
+- [x] Use cases：`CreateExpense`、`GetExpenses`、`GetExpenseDetail`、`UpdateExpense`、`DeleteExpense`
 
 ### 3.2 消費 Data Layer
-- [ ] `ExpenseModel`（freezed）、`ExpenseSplitModel`（freezed）
-- [ ] `SupabaseExpenseDataSource`：呼叫 `create_expense` RPC、CRUD
-- [ ] `HiveExpenseDataSource`：本地快取
-- [ ] `ExpenseRepositoryImpl`
+- [x] `SupabaseExpenseDataSource`：呼叫 `create_expense` RPC、CRUD、camelCase↔snake_case 轉換
+- [x] `ExpenseRepositoryImpl`（try-catch → `AppResult<T>`）
+- [ ] `HiveExpenseDataSource`：本地快取（延至 M4）
 
 ### 3.3 消費 Presentation Layer
-- [ ] `AddExpenseScreen`：金額、付款人、日期、備註、分類、分帳方式
-- [ ] `ExpenseListScreen`：群組消費列表（按日期排序）
-- [ ] `ExpenseDetailScreen`：消費明細 & 分帳詳情
-- [ ] 消費編輯功能（複用 AddExpenseScreen）
-- [ ] 消費刪除功能（含確認 dialog）
-- [ ] `CategoryPicker` widget：6 種消費分類選擇器
-- [ ] `SplitMethodSelector` widget：均分計算邏輯
-- [ ] `ExpenseCard` widget
-- [ ] Riverpod providers：`expensesProvider`、`addExpenseProvider`
+- [x] `AddExpenseScreen`：金額、付款人、日期、備註、分類、均分成員勾選（新增+編輯共用）
+- [x] `ExpenseListScreen`：群組消費列表（按日期排序、空狀態、下拉刷新）
+- [x] `ExpenseDetailScreen`：消費明細 & 分帳詳情、編輯/刪除（僅付款人可操作）
+- [x] `CategoryPicker` widget：6 種消費分類 ChoiceChip 選擇器
+- [x] `SplitSummary` widget：每位成員分攤金額顯示
+- [x] `ExpenseCard` widget：分類 icon、金額、付款人、日期
+- [x] Riverpod providers：`expensesProvider`、`expenseDetailProvider` + 5 個 use case provider
 
 ### 3.4 均分計算邏輯
-- [ ] 選擇參與分帳的成員
-- [ ] 自動計算每人分攤金額（處理除不盡的尾差）
+- [x] 選擇參與分帳的成員（可取消勾選）
+- [x] 自動計算每人分攤金額（處理除不盡的尾差，餘數分配給第一位成員）
 
-**交付物**：可新增消費（均分）、查看消費列表與詳情、編輯/刪除消費
+### 3.5 路由 & 整合
+- [x] `/groups/:groupId/expenses` → ExpenseListScreen
+- [x] `/groups/:groupId/add-expense` → AddExpenseScreen（新增模式）
+- [x] `/groups/:groupId/expenses/:expenseId` → ExpenseDetailScreen
+- [x] `/groups/:groupId/expenses/:expenseId/edit` → AddExpenseScreen（編輯模式）
+- [x] `GroupDetailScreen` 消費入口連結
+
+**交付物**：✅ 可新增消費（均分）、查看消費列表與詳情、編輯/刪除消費、`flutter analyze` 零錯誤
 
 ---
 

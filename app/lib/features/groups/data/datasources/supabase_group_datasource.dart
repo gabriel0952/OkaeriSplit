@@ -1,0 +1,96 @@
+import 'package:app/core/constants/app_constants.dart';
+import 'package:app/features/groups/domain/entities/group_entity.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class SupabaseGroupDataSource {
+  const SupabaseGroupDataSource(this._client);
+  final SupabaseClient _client;
+
+  Future<List<GroupEntity>> getGroups() async {
+    final userId = _client.auth.currentUser!.id;
+    final response = await _client
+        .from('group_members')
+        .select('*, groups(*)')
+        .eq('user_id', userId);
+
+    return (response as List).map((row) {
+      final group = row['groups'] as Map<String, dynamic>;
+      return _mapGroup(group);
+    }).toList();
+  }
+
+  Future<GroupEntity> getGroupDetail(String groupId) async {
+    final response = await _client
+        .from('groups')
+        .select()
+        .eq('id', groupId)
+        .single();
+    return _mapGroup(response);
+  }
+
+  Future<String> createGroup({
+    required String name,
+    required String type,
+    required String currency,
+  }) async {
+    final response = await _client.rpc(
+      'create_group',
+      params: {'p_name': name, 'p_type': type, 'p_currency': currency},
+    );
+    return response as String;
+  }
+
+  Future<String> joinGroupByCode(String inviteCode) async {
+    final response = await _client.rpc(
+      'join_group_by_code',
+      params: {'p_invite_code': inviteCode},
+    );
+    return response as String;
+  }
+
+  Future<void> leaveGroup(String groupId) async {
+    final userId = _client.auth.currentUser!.id;
+    await _client
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+  }
+
+  Future<List<GroupMemberEntity>> getGroupMembers(String groupId) async {
+    final response = await _client
+        .from('group_members')
+        .select('*, profiles(*)')
+        .eq('group_id', groupId);
+
+    return (response as List).map((row) {
+      final profile = row['profiles'] as Map<String, dynamic>?;
+      return GroupMemberEntity(
+        groupId: row['group_id'] as String,
+        userId: row['user_id'] as String,
+        displayName:
+            profile?['display_name'] as String? ??
+            profile?['email'] as String? ??
+            '',
+        avatarUrl: profile?['avatar_url'] as String?,
+        role: row['role'] as String? ?? 'member',
+        joinedAt: DateTime.parse(row['joined_at'] as String),
+      );
+    }).toList();
+  }
+
+  GroupEntity _mapGroup(Map<String, dynamic> data) {
+    return GroupEntity(
+      id: data['id'] as String,
+      name: data['name'] as String,
+      type: GroupType.values.firstWhere(
+        (e) => e.name == data['type'],
+        orElse: () => GroupType.other,
+      ),
+      currency: data['currency'] as String? ?? 'TWD',
+      inviteCode: data['invite_code'] as String? ?? '',
+      createdBy: data['created_by'] as String,
+      createdAt: DateTime.parse(data['created_at'] as String),
+    );
+  }
+}

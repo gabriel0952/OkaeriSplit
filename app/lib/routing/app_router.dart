@@ -2,6 +2,11 @@ import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/auth/presentation/screens/login_screen.dart';
 import 'package:app/features/auth/presentation/screens/register_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:app/features/expenses/presentation/screens/add_expense_screen.dart';
+import 'package:app/features/expenses/presentation/screens/expense_detail_screen.dart';
+import 'package:app/features/expenses/presentation/screens/expense_list_screen.dart';
+import 'package:app/features/groups/presentation/screens/create_group_screen.dart';
+import 'package:app/features/groups/presentation/screens/group_detail_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_list_screen.dart';
 import 'package:app/features/profile/presentation/screens/profile_screen.dart';
 import 'package:app/features/shell/main_shell.dart';
@@ -43,6 +48,50 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/groups',
                 builder: (_, _) => const GroupListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    builder: (_, _) => const CreateGroupScreen(),
+                  ),
+                  GoRoute(
+                    path: ':groupId',
+                    builder: (_, state) => GroupDetailScreen(
+                      groupId: state.pathParameters['groupId']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'expenses',
+                        builder: (_, state) => ExpenseListScreen(
+                          groupId: state.pathParameters['groupId']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: ':expenseId',
+                            builder: (_, state) => ExpenseDetailScreen(
+                              groupId: state.pathParameters['groupId']!,
+                              expenseId: state.pathParameters['expenseId']!,
+                            ),
+                            routes: [
+                              GoRoute(
+                                path: 'edit',
+                                builder: (_, state) => AddExpenseScreen(
+                                  groupId: state.pathParameters['groupId']!,
+                                  expenseId: state.pathParameters['expenseId'],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      GoRoute(
+                        path: 'add-expense',
+                        builder: (_, state) => AddExpenseScreen(
+                          groupId: state.pathParameters['groupId']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
