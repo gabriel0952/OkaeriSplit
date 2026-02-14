@@ -106,8 +106,6 @@ class ProfileScreen extends ConsumerWidget {
         ],
       ),
     );
-    controller.dispose();
-
     if (newName == null || newName.isEmpty || !context.mounted) return;
 
     final currentUser = ref.read(authStateProvider).valueOrNull;
