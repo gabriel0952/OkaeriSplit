@@ -21,7 +21,7 @@ class ExpenseEntity {
   final String paidBy;
   final double amount;
   final String currency;
-  final ExpenseCategory category;
+  final String category;
   final String description;
   final String? note;
   final DateTime expenseDate;

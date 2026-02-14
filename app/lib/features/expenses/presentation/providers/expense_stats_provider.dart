@@ -11,7 +11,7 @@ final categoryStatsProvider =
 
   if (expenses.isEmpty) return [];
 
-  final categoryTotals = <ExpenseCategory, double>{};
+  final categoryTotals = <String, double>{};
   double grandTotal = 0;
 
   for (final expense in expenses) {
@@ -26,6 +26,7 @@ final categoryStatsProvider =
       .map(
         (e) => CategoryStatEntity(
           category: e.key,
+          label: builtInCategoryLabels[e.key] ?? e.key,
           totalAmount: e.value,
           percentage: e.value / grandTotal * 100,
         ),

@@ -1,5 +1,6 @@
-import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
+import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -9,11 +10,13 @@ class ExpenseCard extends StatelessWidget {
     required this.expense,
     this.paidByName,
     this.onTap,
+    this.customCategories = const [],
   });
 
   final ExpenseEntity expense;
   final String? paidByName;
   final VoidCallback? onTap;
+  final List<GroupCategoryEntity> customCategories;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +25,7 @@ class ExpenseCard extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
           child: Icon(
-            _categoryIcon(expense.category),
+            categoryIcon(expense.category, customCategories),
             color: Theme.of(context).colorScheme.onPrimaryContainer,
           ),
         ),
@@ -44,16 +47,5 @@ class ExpenseCard extends StatelessWidget {
         onTap: onTap,
       ),
     );
-  }
-
-  static IconData _categoryIcon(ExpenseCategory category) {
-    return switch (category) {
-      ExpenseCategory.food => Icons.restaurant,
-      ExpenseCategory.transport => Icons.directions_car,
-      ExpenseCategory.accommodation => Icons.hotel,
-      ExpenseCategory.entertainment => Icons.movie,
-      ExpenseCategory.dailyNecessities => Icons.shopping_bag,
-      ExpenseCategory.other => Icons.receipt,
-    };
   }
 }

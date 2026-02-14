@@ -18,6 +18,10 @@ class ExpenseStatsScreen extends ConsumerWidget {
     Colors.red,
     Colors.purple,
     Colors.teal,
+    Colors.amber,
+    Colors.indigo,
+    Colors.pink,
+    Colors.cyan,
   ];
 
   @override
@@ -134,7 +138,7 @@ class ExpenseStatsScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              stat.category.label,
+              stat.label,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -236,7 +240,7 @@ class ExpenseStatsScreen extends ConsumerWidget {
               backgroundColor: _categoryColors[i % _categoryColors.length],
               radius: 16,
               child: Text(
-                stat.category.label.substring(0, 1),
+                stat.label.substring(0, 1),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -244,7 +248,7 @@ class ExpenseStatsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            title: Text(stat.category.label),
+            title: Text(stat.label),
             trailing: Text(
               '\$${stat.totalAmount.toStringAsFixed(0)} (${stat.percentage.toStringAsFixed(1)}%)',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(

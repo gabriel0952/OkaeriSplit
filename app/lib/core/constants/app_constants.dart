@@ -13,12 +13,20 @@ enum ExpenseCategory {
   transport('交通'),
   accommodation('住宿'),
   entertainment('娛樂'),
-  dailyNecessities('日用品'),
-  other('其他');
+  dailyNecessities('日用品');
 
   const ExpenseCategory(this.label);
   final String label;
 }
+
+/// Maps built-in category keys to their display labels.
+const builtInCategoryLabels = <String, String>{
+  'food': '餐飲',
+  'transport': '交通',
+  'accommodation': '住宿',
+  'entertainment': '娛樂',
+  'daily_necessities': '日用品',
+};
 
 enum GroupType {
   roommate('合租'),

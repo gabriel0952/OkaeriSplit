@@ -3,9 +3,9 @@ import 'package:app/features/expenses/domain/utils/split_calculator.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
-import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
+import 'package:app/features/expenses/presentation/widgets/icon_picker_dialog.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +31,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _descriptionController = TextEditingController();
   final _noteController = TextEditingController();
 
-  ExpenseCategory _category = ExpenseCategory.food;
+  String _category = 'food';
   DateTime _expenseDate = DateTime.now();
   String? _paidBy;
   Set<String> _selectedMemberIds = {};
@@ -157,6 +157,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     String currency,
   ) {
     final amount = double.tryParse(_amountController.text) ?? 0;
+    final customCategoriesAsync =
+        ref.watch(groupCategoriesProvider(widget.groupId));
+    final customCategories = customCategoriesAsync.valueOrNull ?? [];
 
     return Form(
       key: _formKey,
@@ -231,6 +234,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           CategoryPicker(
             selected: _category,
             onSelected: (c) => setState(() => _category = c),
+            customCategories: customCategories,
+            onAddCategory: () => _showAddCategoryDialog(context),
+            onDeleteCategory: (id) => _deleteCategory(id),
           ),
           const SizedBox(height: 16),
 
@@ -336,6 +342,96 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _showAddCategoryDialog(BuildContext context) async {
+    final nameController = TextEditingController();
+    String? selectedIcon;
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('新增自訂分類'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: '分類名稱',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('圖示：'),
+                  const SizedBox(width: 8),
+                  if (selectedIcon != null)
+                    Icon(resolveIcon(selectedIcon!), size: 24),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () async {
+                      final icon = await showDialog<String>(
+                        context: context,
+                        builder: (_) => const IconPickerDialog(),
+                      );
+                      if (icon != null) {
+                        setDialogState(() => selectedIcon = icon);
+                      }
+                    },
+                    child: Text(selectedIcon == null ? '選擇圖示' : '更換'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty && selectedIcon != null) {
+                  Navigator.of(context).pop({
+                    'name': name,
+                    'icon': selectedIcon!,
+                  });
+                }
+              },
+              child: const Text('新增'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final ds = ref.read(supabaseExpenseDataSourceProvider);
+      await ds.createGroupCategory(
+        groupId: widget.groupId,
+        name: result['name']!,
+        iconName: result['icon']!,
+      );
+      ref.invalidate(groupCategoriesProvider(widget.groupId));
+      setState(() => _category = result['name']!);
+    }
+  }
+
+  Future<void> _deleteCategory(String categoryId) async {
+    final ds = ref.read(supabaseExpenseDataSourceProvider);
+    await ds.deleteGroupCategory(categoryId);
+    ref.invalidate(groupCategoriesProvider(widget.groupId));
+    // If the deleted category was selected, reset to default
+    final customCategories =
+        ref.read(groupCategoriesProvider(widget.groupId)).valueOrNull ?? [];
+    final stillExists = customCategories.any((c) => c.name == _category);
+    if (!stillExists && !builtInCategoryLabels.containsKey(_category)) {
+      setState(() => _category = 'food');
+    }
   }
 
   List<Widget> _buildMemberSplitList(
@@ -608,15 +704,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
     setState(() => _isSubmitting = true);
 
-    final categorySnake = SupabaseExpenseDataSource.toSnakeCase(_category.name);
-
     if (widget.isEditing) {
       final splits = _buildSplitsPayload(amount);
       final updateExpense = ref.read(updateExpenseUseCaseProvider);
       final result = await updateExpense(
         expenseId: widget.expenseId!,
         amount: amount,
-        category: categorySnake,
+        category: _category,
         description: _descriptionController.text.trim(),
         note: _noteController.text.trim().isEmpty
             ? null
@@ -649,7 +743,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         paidBy: _paidBy!,
         amount: amount,
         currency: currency,
-        category: categorySnake,
+        category: _category,
         description: _descriptionController.text.trim(),
         note: _noteController.text.trim().isEmpty
             ? null

@@ -2,6 +2,7 @@ import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
 import 'package:app/features/expenses/data/repositories/expense_repository_impl.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:app/features/expenses/domain/repositories/expense_repository.dart';
 import 'package:app/features/expenses/domain/usecases/create_expense.dart';
 import 'package:app/features/expenses/domain/usecases/delete_expense.dart';
@@ -95,4 +96,14 @@ final expenseDetailLiveProvider = FutureProvider.family<ExpenseEntity,
     (failure) => throw Exception(failure.message),
     (expense) => expense,
   );
+});
+
+// Group custom categories
+final groupCategoriesProvider =
+    FutureProvider.family<List<GroupCategoryEntity>, String>((
+  ref,
+  groupId,
+) async {
+  final ds = ref.watch(supabaseExpenseDataSourceProvider);
+  return ds.getGroupCategories(groupId);
 });

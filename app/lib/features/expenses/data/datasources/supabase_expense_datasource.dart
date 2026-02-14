@@ -1,5 +1,6 @@
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseExpenseDataSource {
@@ -65,39 +66,61 @@ class SupabaseExpenseDataSource {
     required DateTime expenseDate,
     List<Map<String, dynamic>>? splits,
   }) async {
-    // Update splits BEFORE the expenses row so that when the expenses UPDATE
-    // triggers a Realtime event and listeners refetch, the new splits are
-    // already committed in the DB.
-    if (splits != null) {
-      await _client.from('expense_splits').delete().eq('expense_id', expenseId);
-      await _client.from('expense_splits').insert(
-        splits
-            .map((s) => {
-                  'expense_id': expenseId,
-                  'user_id': s['user_id'],
-                  'amount': s['amount'],
-                  'split_type': s['split_type'],
-                })
-            .toList(),
-      );
-    }
-
-    await _client
-        .from('expenses')
-        .update({
-          'amount': amount,
-          'category': category,
-          'description': description,
-          'note': note,
-          'expense_date': expenseDate.toIso8601String().split('T').first,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', expenseId);
+    await _client.rpc(
+      'update_expense',
+      params: {
+        'p_expense_id': expenseId,
+        'p_amount': amount,
+        'p_category': category,
+        'p_description': description,
+        'p_note': note,
+        'p_expense_date': expenseDate.toIso8601String().split('T').first,
+        'p_splits': splits ?? [],
+      },
+    );
   }
 
   Future<void> deleteExpense(String expenseId) async {
     await _client.from('expenses').delete().eq('id', expenseId);
   }
+
+  // --- Group Categories CRUD ---
+
+  Future<List<GroupCategoryEntity>> getGroupCategories(String groupId) async {
+    final response = await _client
+        .from('group_categories')
+        .select()
+        .eq('group_id', groupId)
+        .order('created_at');
+
+    return (response as List)
+        .map((e) => _mapGroupCategory(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<GroupCategoryEntity> createGroupCategory({
+    required String groupId,
+    required String name,
+    required String iconName,
+  }) async {
+    final response = await _client
+        .from('group_categories')
+        .insert({
+          'group_id': groupId,
+          'name': name,
+          'icon_name': iconName,
+        })
+        .select()
+        .single();
+
+    return _mapGroupCategory(response);
+  }
+
+  Future<void> deleteGroupCategory(String categoryId) async {
+    await _client.from('group_categories').delete().eq('id', categoryId);
+  }
+
+  // --- Mapping helpers ---
 
   ExpenseEntity _mapExpense(Map<String, dynamic> data) {
     final splitsData = data['expense_splits'] as List? ?? [];
@@ -107,7 +130,7 @@ class SupabaseExpenseDataSource {
       paidBy: data['paid_by'] as String,
       amount: (data['amount'] as num).toDouble(),
       currency: data['currency'] as String? ?? 'TWD',
-      category: _mapCategory(data['category'] as String?),
+      category: data['category'] as String? ?? 'food',
       description: data['description'] as String? ?? '',
       note: data['note'] as String?,
       expenseDate: DateTime.parse(data['expense_date'] as String),
@@ -131,11 +154,12 @@ class SupabaseExpenseDataSource {
     );
   }
 
-  ExpenseCategory _mapCategory(String? value) {
-    if (value == null) return ExpenseCategory.other;
-    return ExpenseCategory.values.firstWhere(
-      (e) => toSnakeCase(e.name) == value,
-      orElse: () => ExpenseCategory.other,
+  GroupCategoryEntity _mapGroupCategory(Map<String, dynamic> data) {
+    return GroupCategoryEntity(
+      id: data['id'] as String,
+      groupId: data['group_id'] as String,
+      name: data['name'] as String,
+      iconName: data['icon_name'] as String,
     );
   }
 

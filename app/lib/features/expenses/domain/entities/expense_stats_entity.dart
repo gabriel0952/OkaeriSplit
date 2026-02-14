@@ -1,13 +1,13 @@
-import 'package:app/core/constants/app_constants.dart';
-
 class CategoryStatEntity {
   const CategoryStatEntity({
     required this.category,
+    required this.label,
     required this.totalAmount,
     required this.percentage,
   });
 
-  final ExpenseCategory category;
+  final String category;
+  final String label;
   final double totalAmount;
   final double percentage;
 }

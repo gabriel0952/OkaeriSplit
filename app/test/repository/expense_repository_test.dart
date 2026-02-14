@@ -1,8 +1,8 @@
-import 'package:app/core/constants/app_constants.dart';
 import 'package:app/core/errors/failures.dart';
 import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
 import 'package:app/features/expenses/data/repositories/expense_repository_impl.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/core/constants/app_constants.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -24,7 +24,7 @@ void main() {
     paidBy: 'user-1',
     amount: 300,
     currency: 'TWD',
-    category: ExpenseCategory.food,
+    category: 'food',
     description: '午餐',
     expenseDate: DateTime(2025, 1, 1),
     createdAt: DateTime(2025, 1, 1),

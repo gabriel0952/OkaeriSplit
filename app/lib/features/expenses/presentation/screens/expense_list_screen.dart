@@ -1,12 +1,14 @@
 import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/expense_card.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 class ExpenseListScreen extends ConsumerWidget {
   const ExpenseListScreen({super.key, required this.groupId});
@@ -63,6 +65,20 @@ class ExpenseListScreen extends ConsumerWidget {
 
           final members = membersAsync.valueOrNull ?? [];
           final memberMap = {for (final m in members) m.userId: m.displayName};
+          final customCategories =
+              ref.watch(groupCategoriesProvider(groupId)).valueOrNull ?? [];
+
+          // Build a flat list of date headers + expense items
+          final items = <_ListItem>[];
+          String? lastDateKey;
+          for (final expense in expenses) {
+            final dateKey = _formatDateKey(expense.expenseDate);
+            if (dateKey != lastDateKey) {
+              items.add(_DateHeader(dateKey));
+              lastDateKey = dateKey;
+            }
+            items.add(_ExpenseItem(expense));
+          }
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -70,12 +86,30 @@ class ExpenseListScreen extends ConsumerWidget {
             },
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: expenses.length,
+              itemCount: items.length,
               itemBuilder: (context, index) {
-                final expense = expenses[index];
+                final item = items[index];
+                if (item is _DateHeader) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      top: index == 0 ? 0 : 16,
+                      bottom: 8,
+                    ),
+                    child: Text(
+                      item.label,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  );
+                }
+                final expense = (item as _ExpenseItem).expense;
                 return ExpenseCard(
                   expense: expense,
                   paidByName: memberMap[expense.paidBy],
+                  customCategories: customCategories,
                   onTap: () =>
                       context.push('/groups/$groupId/expenses/${expense.id}'),
                 );
@@ -86,4 +120,35 @@ class ExpenseListScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+// --- Helpers for date-grouped list ---
+
+const _weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+
+String _formatDateKey(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final target = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(target).inDays;
+
+  final weekday = _weekdays[date.weekday - 1];
+  final formatted = DateFormat('MM/dd').format(date);
+
+  if (diff == 0) return '今天  $formatted';
+  if (diff == 1) return '昨天  $formatted';
+  if (date.year == now.year) return '$formatted  星期$weekday';
+  return '${DateFormat('yyyy/MM/dd').format(date)}  星期$weekday';
+}
+
+sealed class _ListItem {}
+
+class _DateHeader extends _ListItem {
+  _DateHeader(this.label);
+  final String label;
+}
+
+class _ExpenseItem extends _ListItem {
+  _ExpenseItem(this.expense);
+  final ExpenseEntity expense;
 }

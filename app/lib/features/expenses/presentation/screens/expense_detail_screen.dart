@@ -3,6 +3,7 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
+import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
 import 'package:app/features/expenses/presentation/widgets/split_summary.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
     final expenseAsync = ref.watch(expenseDetailLiveProvider(liveKey));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
+    final customCategories =
+        ref.watch(groupCategoriesProvider(groupId)).valueOrNull ?? [];
 
     return Scaffold(
       appBar: AppBar(title: const Text('消費詳情')),
@@ -46,6 +49,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
           final members = membersAsync.valueOrNull ?? [];
           final memberMap = {for (final m in members) m.userId: m.displayName};
           final isOwner = currentUser?.id == expense.paidBy;
+          final isMember = members.any((m) => m.userId == currentUser?.id);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -84,7 +88,11 @@ class ExpenseDetailScreen extends ConsumerWidget {
                         _infoRow(context, '備註', expense.note!),
                       ],
                       const Divider(),
-                      _infoRow(context, '分類', expense.category.label),
+                      _infoRow(
+                        context,
+                        '分類',
+                        categoryLabel(expense.category, customCategories),
+                      ),
                       const Divider(),
                       _infoRow(
                         context,
@@ -123,8 +131,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Actions (only for paidBy user)
-              if (isOwner) ...[
+              // Edit button: all group members can edit
+              if (isMember) ...[
                 FilledButton.icon(
                   onPressed: () =>
                       context.push('/groups/$groupId/expenses/$expenseId/edit'),
@@ -132,6 +140,10 @@ class ExpenseDetailScreen extends ConsumerWidget {
                   label: const Text('編輯'),
                 ),
                 const SizedBox(height: 8),
+              ],
+
+              // Delete button: only paidBy
+              if (isOwner)
                 OutlinedButton.icon(
                   onPressed: () => _handleDelete(context, ref),
                   style: OutlinedButton.styleFrom(
@@ -143,7 +155,6 @@ class ExpenseDetailScreen extends ConsumerWidget {
                   icon: const Icon(Icons.delete),
                   label: const Text('刪除'),
                 ),
-              ],
             ],
           );
         },
