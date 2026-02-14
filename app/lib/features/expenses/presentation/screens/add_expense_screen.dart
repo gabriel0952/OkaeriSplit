@@ -39,8 +39,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   bool _isLoaded = false;
 
   SplitType _splitType = SplitType.equal;
+  String? _selectedCurrency;
   final Map<String, TextEditingController> _ratioControllers = {};
   final Map<String, TextEditingController> _fixedAmountControllers = {};
+
+  static const _supportedCurrencies = [
+    'TWD',
+    'USD',
+    'JPY',
+    'EUR',
+    'GBP',
+    'KRW',
+    'CNY',
+  ];
 
   @override
   void dispose() {
@@ -130,10 +141,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           }
           _ensureControllers(members);
 
-          final currency =
+          final groupCurrency =
               groupAsync.valueOrNull?.currency ?? AppConstants.defaultCurrency;
+          _selectedCurrency ??= groupCurrency;
 
-          return _buildForm(context, members, currency);
+          return _buildForm(context, members, _selectedCurrency!);
         },
       ),
     );
@@ -167,6 +179,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               return null;
             },
             onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 16),
+
+          // Currency
+          DropdownButtonFormField<String>(
+            initialValue: _selectedCurrency,
+            decoration: const InputDecoration(
+              labelText: '幣別',
+              border: OutlineInputBorder(),
+            ),
+            items: _supportedCurrencies
+                .map(
+                  (c) => DropdownMenuItem(value: c, child: Text(c)),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _selectedCurrency = value);
+            },
           ),
           const SizedBox(height: 16),
 

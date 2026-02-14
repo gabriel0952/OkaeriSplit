@@ -21,11 +21,13 @@ class OverallBalanceEntity {
     required this.groupId,
     required this.groupName,
     required this.netBalance,
+    required this.currency,
   });
 
   final String groupId;
   final String groupName;
   final double netBalance;
+  final String currency;
 }
 
 class SettlementEntity {

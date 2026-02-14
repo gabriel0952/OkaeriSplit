@@ -3,6 +3,7 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/groups/presentation/widgets/invite_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/member_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,11 +109,34 @@ class GroupDetailScreen extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // Members section
-              Text(
-                '成員',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              Row(
+                children: [
+                  Text(
+                    '成員',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      final memberIds = membersAsync.valueOrNull
+                              ?.map((m) => m.userId)
+                              .toSet() ??
+                          {};
+                      showDialog(
+                        context: context,
+                        builder: (_) => InviteMemberDialog(
+                          groupId: groupId,
+                          existingMemberIds: memberIds,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.person_add, size: 18),
+                    label: const Text('邀請'),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               membersAsync.when(
@@ -153,10 +177,34 @@ class GroupDetailScreen extends ConsumerWidget {
                   onTap: () => context.push('/groups/$groupId/balances'),
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // Stats entry
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.pie_chart_outline),
+                  title: const Text('消費統計'),
+                  subtitle: const Text('分類佔比與月度趨勢'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/groups/$groupId/stats'),
+                ),
+              ),
               const SizedBox(height: 24),
 
-              // Leave group button
-              if (!isOwner)
+              // Leave / Delete group button
+              if (isOwner)
+                OutlinedButton.icon(
+                  onPressed: () => _handleDeleteGroup(context, ref),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('刪除群組'),
+                )
+              else
                 OutlinedButton.icon(
                   onPressed: () => _handleLeaveGroup(context, ref),
                   style: OutlinedButton.styleFrom(
@@ -172,6 +220,48 @@ class GroupDetailScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+
+  Future<void> _handleDeleteGroup(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('刪除群組'),
+        content: const Text('確定要刪除這個群組嗎？所有消費紀錄、帳務與成員資料都將被永久刪除，此操作無法復原。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final deleteGroup = ref.read(deleteGroupUseCaseProvider);
+    final result = await deleteGroup(groupId);
+
+    if (!context.mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+      (_) {
+        ref.invalidate(groupsProvider);
+        context.go('/groups');
+      },
     );
   }
 

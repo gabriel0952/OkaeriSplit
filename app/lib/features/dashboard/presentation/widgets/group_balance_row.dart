@@ -25,7 +25,7 @@ class GroupBalanceRow extends StatelessWidget {
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
       trailing: Text(
-        '${isPositive ? '+' : ''}TWD ${balance.netBalance.toStringAsFixed(0)}',
+        '${isPositive ? '+' : ''}${balance.currency} ${balance.netBalance.toStringAsFixed(0)}',
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
               color: isPositive ? Colors.green : Colors.red,
               fontWeight: FontWeight.bold,

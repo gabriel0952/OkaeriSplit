@@ -21,6 +21,9 @@ class BalanceSummaryCard extends StatelessWidget {
 
     final net = totalReceivable - totalPayable;
 
+    final currencies = balances.map((b) => b.currency).toSet();
+    final currencyLabel = currencies.length == 1 ? currencies.first : '\$';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -41,6 +44,7 @@ class BalanceSummaryCard extends StatelessWidget {
                     label: '應收',
                     amount: totalReceivable,
                     color: Colors.green,
+                    currency: currencyLabel,
                   ),
                 ),
                 Expanded(
@@ -48,6 +52,7 @@ class BalanceSummaryCard extends StatelessWidget {
                     label: '應付',
                     amount: totalPayable,
                     color: Colors.red,
+                    currency: currencyLabel,
                   ),
                 ),
                 Expanded(
@@ -55,6 +60,7 @@ class BalanceSummaryCard extends StatelessWidget {
                     label: '淨額',
                     amount: net,
                     color: net >= 0 ? Colors.green : Colors.red,
+                    currency: currencyLabel,
                   ),
                 ),
               ],
@@ -71,11 +77,13 @@ class _SummaryColumn extends StatelessWidget {
     required this.label,
     required this.amount,
     required this.color,
+    required this.currency,
   });
 
   final String label;
   final double amount;
   final Color color;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +97,7 @@ class _SummaryColumn extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'TWD ${amount.toStringAsFixed(0)}',
+          '$currency ${amount.toStringAsFixed(0)}',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: color,
                 fontWeight: FontWeight.bold,

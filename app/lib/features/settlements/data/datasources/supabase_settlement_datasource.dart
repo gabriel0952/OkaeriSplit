@@ -78,6 +78,7 @@ class SupabaseSettlementDataSource {
       groupId: data['group_id'] as String,
       groupName: data['group_name'] as String? ?? '',
       netBalance: (data['net_balance'] as num).toDouble(),
+      currency: data['currency'] as String? ?? 'TWD',
     );
   }
 

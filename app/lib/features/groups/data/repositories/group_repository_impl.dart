@@ -77,4 +77,39 @@ class GroupRepositoryImpl implements GroupRepository {
       return Left(ServerFailure(e.toString()));
     }
   }
+
+  @override
+  Future<AppResult<List<Map<String, dynamic>>>> searchUsers(
+    String query,
+  ) async {
+    try {
+      final users = await _dataSource.searchUsers(query);
+      return Right(users);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> inviteUserToGroup({
+    required String groupId,
+    required String userId,
+  }) async {
+    try {
+      await _dataSource.inviteUserToGroup(groupId: groupId, userId: userId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> deleteGroup(String groupId) async {
+    try {
+      await _dataSource.deleteGroup(groupId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
 }

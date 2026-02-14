@@ -8,7 +8,10 @@ import 'package:app/features/groups/domain/usecases/get_group_detail.dart';
 import 'package:app/features/groups/domain/usecases/get_group_members.dart';
 import 'package:app/features/groups/domain/usecases/get_groups.dart';
 import 'package:app/features/groups/domain/usecases/join_group_by_code.dart';
+import 'package:app/features/groups/domain/usecases/delete_group.dart';
+import 'package:app/features/groups/domain/usecases/invite_user.dart';
 import 'package:app/features/groups/domain/usecases/leave_group.dart';
+import 'package:app/features/groups/domain/usecases/search_users.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Infrastructure
@@ -45,6 +48,18 @@ final joinGroupByCodeUseCaseProvider = Provider<JoinGroupByCode>((ref) {
 
 final leaveGroupUseCaseProvider = Provider<LeaveGroup>((ref) {
   return LeaveGroup(ref.watch(groupRepositoryProvider));
+});
+
+final deleteGroupUseCaseProvider = Provider<DeleteGroup>((ref) {
+  return DeleteGroup(ref.watch(groupRepositoryProvider));
+});
+
+final searchUsersUseCaseProvider = Provider<SearchUsers>((ref) {
+  return SearchUsers(ref.watch(groupRepositoryProvider));
+});
+
+final inviteUserUseCaseProvider = Provider<InviteUser>((ref) {
+  return InviteUser(ref.watch(groupRepositoryProvider));
 });
 
 // Presentation providers

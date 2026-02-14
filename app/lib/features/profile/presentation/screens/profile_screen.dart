@@ -1,3 +1,4 @@
+import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
@@ -59,6 +60,40 @@ class ProfileScreen extends ConsumerWidget {
                       subtitle: Text(profile.defaultCurrency),
                       trailing: const Icon(Icons.edit),
                       onTap: () => _editCurrency(context, ref, profile.defaultCurrency),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.dark_mode_outlined),
+                      title: const Text('深色模式'),
+                      trailing: DropdownButton<ThemeMode>(
+                        value: ref.watch(themeModeProvider),
+                        underline: const SizedBox.shrink(),
+                        onChanged: (mode) {
+                          if (mode != null) {
+                            ref.read(themeModeProvider.notifier).set(mode);
+                          }
+                        },
+                        items: const [
+                          DropdownMenuItem(
+                            value: ThemeMode.system,
+                            child: Text('跟隨系統'),
+                          ),
+                          DropdownMenuItem(
+                            value: ThemeMode.light,
+                            child: Text('淺色'),
+                          ),
+                          DropdownMenuItem(
+                            value: ThemeMode.dark,
+                            child: Text('深色'),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

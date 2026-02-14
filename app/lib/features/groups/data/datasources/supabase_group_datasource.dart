@@ -79,6 +79,35 @@ class SupabaseGroupDataSource {
     }).toList();
   }
 
+  Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final currentUserId = _client.auth.currentUser!.id;
+    final response = await _client
+        .from('profiles')
+        .select('id, email, display_name, avatar_url')
+        .or('email.ilike.%$query%,display_name.ilike.%$query%')
+        .neq('id', currentUserId)
+        .limit(20);
+
+    return (response as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> inviteUserToGroup({
+    required String groupId,
+    required String userId,
+  }) async {
+    await _client.rpc(
+      'invite_user_to_group',
+      params: {'p_group_id': groupId, 'p_user_id': userId},
+    );
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    await _client.rpc(
+      'delete_group',
+      params: {'p_group_id': groupId},
+    );
+  }
+
   GroupEntity _mapGroup(Map<String, dynamic> data) {
     return GroupEntity(
       id: data['id'] as String,

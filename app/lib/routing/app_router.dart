@@ -5,6 +5,7 @@ import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dar
 import 'package:app/features/expenses/presentation/screens/add_expense_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_detail_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_list_screen.dart';
+import 'package:app/features/expenses/presentation/screens/expense_stats_screen.dart';
 import 'package:app/features/groups/presentation/screens/create_group_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_detail_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_list_screen.dart';
@@ -100,6 +101,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       GoRoute(
                         path: 'settlements',
                         builder: (_, state) => SettlementHistoryScreen(
+                          groupId: state.pathParameters['groupId']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'stats',
+                        builder: (_, state) => ExpenseStatsScreen(
                           groupId: state.pathParameters['groupId']!,
                         ),
                       ),
