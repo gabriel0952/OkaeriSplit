@@ -3,9 +3,11 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/settlements/domain/entities/settlement_entity.dart';
 import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:app/features/settlements/presentation/widgets/balance_card.dart';
 import 'package:app/features/settlements/presentation/widgets/debt_row.dart';
+import 'package:app/features/settlements/presentation/widgets/simplified_debt_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +51,7 @@ class BalanceScreen extends ConsumerWidget {
           }
 
           final currency = groupAsync.valueOrNull?.currency ?? 'TWD';
+          final simplifiedDebts = ref.watch(simplifiedDebtsProvider(groupId));
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -58,6 +61,44 @@ class BalanceScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 BalanceCard(balances: balances, currency: currency),
+                const SizedBox(height: 24),
+                Text(
+                  '建議轉帳',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: simplifiedDebts.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: Text(
+                              '已全部結清！',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        )
+                      : Column(
+                          children: simplifiedDebts.map((debt) {
+                            final isFromCurrentUser =
+                                debt.fromUserId == currentUser?.id;
+                            return SimplifiedDebtRow(
+                              debt: debt,
+                              currency: currency,
+                              isFromCurrentUser: isFromCurrentUser,
+                              onPay: () => _handlePay(
+                                context,
+                                ref,
+                                debt,
+                                currency,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                ),
                 const SizedBox(height: 24),
                 Text(
                   '成員明細',
@@ -76,12 +117,6 @@ class BalanceScreen extends ConsumerWidget {
                         balance: balance,
                         currency: currency,
                         isCurrentUser: isCurrentUser,
-                        onMarkSettled: () => _handleMarkSettled(
-                          context,
-                          ref,
-                          balance,
-                          currency,
-                        ),
                       );
                     }).toList(),
                   ),
@@ -94,19 +129,21 @@ class BalanceScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleMarkSettled(
+  Future<void> _handlePay(
     BuildContext context,
     WidgetRef ref,
-    dynamic balance,
+    SimplifiedDebtEntity debt,
     String currency,
   ) async {
-    final amount = balance.netBalance.abs();
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('確認付款'),
-        content: Text('確定要標記已支付 $currency ${amount.toStringAsFixed(0)} 嗎？'),
+        content: Text(
+          '確定要標記 ${debt.fromDisplayName} 支付 '
+          '$currency ${debt.amount.toStringAsFixed(0)} 給 '
+          '${debt.toDisplayName} 嗎？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -122,19 +159,12 @@ class BalanceScreen extends ConsumerWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Find the creditor (person with highest positive balance)
-    final balances = ref.read(balancesProvider(groupId)).valueOrNull ?? [];
-    final creditors = balances.where((b) => b.netBalance > 0).toList()
-      ..sort((a, b) => b.netBalance.compareTo(a.netBalance));
-
-    if (creditors.isEmpty) return;
-
     final markSettled = ref.read(markSettledUseCaseProvider);
     final result = await markSettled(
       groupId: groupId,
-      fromUser: balance.userId,
-      toUser: creditors.first.userId,
-      amount: amount,
+      fromUser: debt.fromUserId,
+      toUser: debt.toUserId,
+      amount: debt.amount,
       currency: currency,
     );
 

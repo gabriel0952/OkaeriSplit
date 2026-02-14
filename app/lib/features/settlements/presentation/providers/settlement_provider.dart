@@ -7,6 +7,7 @@ import 'package:app/features/settlements/domain/usecases/get_balances.dart';
 import 'package:app/features/settlements/domain/usecases/get_overall_balances.dart';
 import 'package:app/features/settlements/domain/usecases/get_settlements.dart';
 import 'package:app/features/settlements/domain/usecases/mark_settled.dart';
+import 'package:app/features/settlements/domain/utils/debt_simplifier.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Infrastructure
@@ -60,6 +61,13 @@ final settlementsProvider =
     (failure) => throw Exception(failure.message),
     (settlements) => settlements,
   );
+});
+
+final simplifiedDebtsProvider =
+    Provider.family<List<SimplifiedDebtEntity>, String>((ref, groupId) {
+  final balancesAsync = ref.watch(balancesProvider(groupId));
+  return balancesAsync.whenOrNull(data: (b) => DebtSimplifier.simplify(b)) ??
+      [];
 });
 
 final overallBalancesProvider =

@@ -49,3 +49,23 @@ class SettlementEntity {
   final DateTime settledAt;
   final DateTime createdAt;
 }
+
+class SimplifiedDebtEntity {
+  const SimplifiedDebtEntity({
+    required this.fromUserId,
+    required this.fromDisplayName,
+    required this.toUserId,
+    required this.toDisplayName,
+    this.fromAvatarUrl,
+    this.toAvatarUrl,
+    required this.amount,
+  });
+
+  final String fromUserId;
+  final String fromDisplayName;
+  final String toUserId;
+  final String toDisplayName;
+  final String? fromAvatarUrl;
+  final String? toAvatarUrl;
+  final double amount;
+}

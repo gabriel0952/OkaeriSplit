@@ -7,13 +7,11 @@ class DebtRow extends StatelessWidget {
     required this.balance,
     required this.currency,
     required this.isCurrentUser,
-    this.onMarkSettled,
   });
 
   final BalanceEntity balance;
   final String currency;
   final bool isCurrentUser;
-  final VoidCallback? onMarkSettled;
 
   @override
   Widget build(BuildContext context) {
@@ -49,16 +47,6 @@ class DebtRow extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
           ),
-          if (isCurrentUser && !isPositive) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: onMarkSettled,
-              icon: const Icon(Icons.check_circle_outline),
-              tooltip: '標記已付款',
-              color: Theme.of(context).colorScheme.primary,
-              iconSize: 20,
-            ),
-          ],
         ],
       ),
     );
