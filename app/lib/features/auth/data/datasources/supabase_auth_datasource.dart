@@ -51,6 +51,11 @@ class SupabaseAuthDataSource {
     await _client.auth.signInWithOAuth(OAuthProvider.google);
   }
 
+  Future<void> deleteAccount() async {
+    await _client.rpc('delete_user_account');
+    await _client.auth.signOut();
+  }
+
   Future<void> signInWithApple() async {
     await _client.auth.signInWithOAuth(OAuthProvider.apple);
   }

@@ -32,7 +32,7 @@ class SettlementCard extends StatelessWidget {
           '${settlement.currency} ${settlement.amount.toStringAsFixed(0)}',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: Colors.green,
+                color: Theme.of(context).colorScheme.primary,
               ),
         ),
       ),

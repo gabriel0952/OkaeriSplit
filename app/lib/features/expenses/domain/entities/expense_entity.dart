@@ -14,6 +14,7 @@ class ExpenseEntity {
     required this.createdAt,
     required this.updatedAt,
     this.splits = const [],
+    this.attachmentUrls = const [],
   });
 
   final String id;
@@ -28,6 +29,7 @@ class ExpenseEntity {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ExpenseSplitEntity> splits;
+  final List<String> attachmentUrls;
 }
 
 class ExpenseSplitEntity {

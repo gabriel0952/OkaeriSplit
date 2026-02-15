@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/utils/split_calculator.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
@@ -11,6 +13,7 @@ import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
@@ -42,6 +45,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   String? _selectedCurrency;
   final Map<String, TextEditingController> _ratioControllers = {};
   final Map<String, TextEditingController> _fixedAmountControllers = {};
+
+  // Attachments
+  final List<File> _newAttachments = [];
+  List<String> _existingAttachmentUrls = [];
+  final List<String> _removedAttachmentUrls = [];
+  final _imagePicker = ImagePicker();
+
+  // Itemized split
+  final List<_ItemEntry> _itemEntries = [];
 
   static const _supportedCurrencies = [
     'TWD',
@@ -112,6 +124,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               if (expense.splits.isNotEmpty) {
                 _splitType = expense.splits.first.splitType;
               }
+              _existingAttachmentUrls = List.of(expense.attachmentUrls);
               _isLoaded = true;
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => setState(() {}),
@@ -161,75 +174,158 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ref.watch(groupCategoriesProvider(widget.groupId));
     final customCategories = customCategoriesAsync.valueOrNull ?? [];
 
+    final colorScheme = Theme.of(context).colorScheme;
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: colorScheme.outlineVariant),
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: colorScheme.primary, width: 2),
+    );
+    final inputTheme = InputDecoration(
+      border: inputBorder,
+      enabledBorder: inputBorder,
+      focusedBorder: focusedBorder,
+      filled: true,
+      fillColor: colorScheme.surfaceContainerLowest,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Amount
-          TextFormField(
-            controller: _amountController,
-            decoration: const InputDecoration(
-              labelText: '金額',
-              prefixText: '\$ ',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            validator: (value) {
-              if (value == null || value.isEmpty) return '請輸入金額';
-              final amount = double.tryParse(value);
-              if (amount == null || amount <= 0) return '請輸入有效金額';
-              return null;
-            },
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-
-          // Currency
-          DropdownButtonFormField<String>(
-            initialValue: _selectedCurrency,
-            decoration: const InputDecoration(
-              labelText: '幣別',
-              border: OutlineInputBorder(),
-            ),
-            items: _supportedCurrencies
-                .map(
-                  (c) => DropdownMenuItem(value: c, child: Text(c)),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) setState(() => _selectedCurrency = value);
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Paid by
-          DropdownButtonFormField<String>(
-            initialValue: _paidBy,
-            decoration: const InputDecoration(
-              labelText: '付款人',
-              border: OutlineInputBorder(),
-            ),
-            items: members
-                .map(
-                  (m) => DropdownMenuItem(
-                    value: m.userId,
-                    child: Text(m.displayName),
+          // Amount + Currency row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextFormField(
+                  controller: _amountController,
+                  decoration: inputTheme.copyWith(
+                    labelText: '金額',
+                    prefixText: '\$ ',
                   ),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => _paidBy = value),
-            validator: (value) => value == null ? '請選擇付款人' : null,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return '請輸入金額';
+                    final amount = double.tryParse(value);
+                    if (amount == null || amount <= 0) return '請輸入有效金額';
+                    return null;
+                  },
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: InputDecorator(
+                  decoration: inputTheme.copyWith(
+                    labelText: '幣別',
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedCurrency,
+                      isExpanded: true,
+                      isDense: true,
+                      borderRadius: BorderRadius.circular(12),
+                      items: _supportedCurrencies
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedCurrency = value);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
+
+          // Description
+          TextFormField(
+            controller: _descriptionController,
+            decoration: inputTheme.copyWith(
+              labelText: '描述',
+              prefixIcon: const Icon(Icons.edit_outlined),
+            ),
+            validator: (value) =>
+                (value == null || value.isEmpty) ? '請輸入描述' : null,
+          ),
+          const SizedBox(height: 16),
+
+          // Paid by + Date row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: InputDecorator(
+                  decoration: inputTheme.copyWith(
+                    labelText: '付款人',
+                    prefixIcon: const Icon(Icons.person_outlined),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _paidBy,
+                      isExpanded: true,
+                      isDense: true,
+                      borderRadius: BorderRadius.circular(12),
+                      items: members
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m.userId,
+                              child: Text(
+                                m.displayName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) => setState(() => _paidBy = value),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _expenseDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                    );
+                    if (picked != null) setState(() => _expenseDate = picked);
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: inputTheme.copyWith(
+                      labelText: '日期',
+                      prefixIcon: const Icon(Icons.calendar_today_outlined),
+                    ),
+                    child: Text(
+                      DateFormat('yyyy/MM/dd').format(_expenseDate),
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
           // Category
-          Text(
-            '分類',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
+          _buildSectionLabel('分類'),
           const SizedBox(height: 8),
           CategoryPicker(
             selected: _category,
@@ -238,106 +334,106 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             onAddCategory: () => _showAddCategoryDialog(context),
             onDeleteCategory: (id) => _deleteCategory(id),
           ),
-          const SizedBox(height: 16),
-
-          // Description
-          TextFormField(
-            controller: _descriptionController,
-            decoration: const InputDecoration(
-              labelText: '描述',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) =>
-                (value == null || value.isEmpty) ? '請輸入描述' : null,
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           // Note
           TextFormField(
             controller: _noteController,
-            decoration: const InputDecoration(
+            decoration: inputTheme.copyWith(
               labelText: '備註（選填）',
-              border: OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.notes_outlined),
             ),
             maxLines: 2,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Date
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.calendar_today),
-            title: const Text('日期'),
-            trailing: Text(
-              DateFormat('yyyy/MM/dd').format(_expenseDate),
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _expenseDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now().add(const Duration(days: 1)),
-              );
-              if (picked != null) setState(() => _expenseDate = picked);
-            },
-          ),
-          const Divider(),
+          // Attachments
+          _buildSectionLabel('收據/照片'),
           const SizedBox(height: 8),
+          _buildAttachmentSection(context),
+          const SizedBox(height: 20),
+
+          const Divider(),
+          const SizedBox(height: 12),
 
           // Split type selector
-          Text(
-            '分帳方式',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
+          _buildSectionLabel('分帳方式'),
           const SizedBox(height: 8),
-          SegmentedButton<SplitType>(
-            segments: const [
-              ButtonSegment(value: SplitType.equal, label: Text('均分')),
-              ButtonSegment(
-                value: SplitType.customRatio,
-                label: Text('自訂比例'),
-              ),
-              ButtonSegment(
-                value: SplitType.fixedAmount,
-                label: Text('指定金額'),
-              ),
-            ],
-            selected: {_splitType},
-            onSelectionChanged: (selected) {
-              setState(() => _splitType = selected.first);
-            },
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: SplitType.values.map((type) {
+              final selected = _splitType == type;
+              return ChoiceChip(
+                label: Text(type.label),
+                selected: selected,
+                onSelected: (_) => setState(() => _splitType = type),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 16),
 
-          // Split members
-          Text(
-            '分帳成員',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          ..._buildMemberSplitList(members, amount),
+          // Itemized split mode
+          if (_splitType == SplitType.itemized) ...[
+            _buildSectionLabel('品項'),
+            const SizedBox(height: 8),
+            ..._buildItemizedList(members),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _itemEntries.add(_ItemEntry(
+                    nameController: TextEditingController(),
+                    amountController: TextEditingController(),
+                    sharedByUserIds: members.map((m) => m.userId).toSet(),
+                  ));
+                });
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('新增品項'),
+            ),
+            if (amount > 0) _buildItemizedHint(amount),
+          ],
 
-          // Fixed amount validation hint
-          if (_splitType == SplitType.fixedAmount && amount > 0)
-            _buildFixedAmountHint(amount),
+          // Non-itemized split
+          if (_splitType != SplitType.itemized) ...[
+            // Split members
+            _buildSectionLabel('分帳成員'),
+            const SizedBox(height: 8),
+            ..._buildMemberSplitList(members, amount),
+
+            // Fixed amount validation hint
+            if (_splitType == SplitType.fixedAmount && amount > 0)
+              _buildFixedAmountHint(amount),
+          ],
 
           const SizedBox(height: 24),
 
           // Submit
-          FilledButton(
-            onPressed: _isSubmitting ? null : () => _handleSubmit(currency),
-            child: _isSubmitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(widget.isEditing ? '儲存變更' : '新增消費'),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 48,
+            child: FilledButton(
+              onPressed: _isSubmitting ? null : () => _handleSubmit(currency),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      widget.isEditing ? '儲存變更' : '新增消費',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
           ),
         ],
       ),
@@ -434,6 +530,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+
   List<Widget> _buildMemberSplitList(
     List<GroupMemberEntity> members,
     double amount,
@@ -445,6 +550,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         return _buildRatioSplitList(members, amount);
       case SplitType.fixedAmount:
         return _buildFixedAmountSplitList(members, amount);
+      case SplitType.itemized:
+        return []; // Handled separately by _buildItemizedList
     }
   }
 
@@ -609,7 +716,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           '金額分配正確',
-          style: TextStyle(color: Colors.green.shade700, fontSize: 13),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontSize: 13,
+          ),
         ),
       );
     }
@@ -620,7 +730,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         diff > 0
             ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
             : '超出 \$${diff.abs().toStringAsFixed(2)}',
-        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontSize: 13,
+        ),
       ),
     );
   }
@@ -635,6 +748,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   }
 
   List<Map<String, dynamic>> _buildSplitsPayload(double amount) {
+    if (_splitType == SplitType.itemized) {
+      return _buildItemizedSplitsPayload();
+    }
+
     final memberIds = _selectedMemberIds.toList();
 
     switch (_splitType) {
@@ -682,12 +799,267 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               },
             )
             .toList();
+
+      case SplitType.itemized:
+        return _buildItemizedSplitsPayload();
     }
+  }
+
+  /// Aggregate per-user amounts from itemized entries.
+  List<Map<String, dynamic>> _buildItemizedSplitsPayload() {
+    final perUser = <String, double>{};
+    for (final item in _itemEntries) {
+      final itemAmount = double.tryParse(item.amountController.text) ?? 0;
+      if (itemAmount <= 0 || item.sharedByUserIds.isEmpty) continue;
+      final share = itemAmount / item.sharedByUserIds.length;
+      for (final userId in item.sharedByUserIds) {
+        perUser[userId] = (perUser[userId] ?? 0) + share;
+      }
+    }
+
+    return perUser.entries
+        .map((e) => {
+              'user_id': e.key,
+              'amount': double.parse(e.value.toStringAsFixed(2)),
+              'split_type': 'itemized',
+            })
+        .toList();
+  }
+
+  List<Widget> _buildItemizedList(List<GroupMemberEntity> members) {
+    return _itemEntries.asMap().entries.map((entry) {
+      final idx = entry.key;
+      final item = entry.value;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: item.nameController,
+                      decoration: const InputDecoration(
+                        labelText: '品項名稱',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: item.amountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: '金額',
+                        prefixText: '\$ ',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _itemEntries[idx].nameController.dispose();
+                        _itemEntries[idx].amountController.dispose();
+                        _itemEntries.removeAt(idx);
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '分攤者',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              Wrap(
+                spacing: 4,
+                children: members.map((m) {
+                  final selected = item.sharedByUserIds.contains(m.userId);
+                  return FilterChip(
+                    label: Text(
+                      m.displayName,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    selected: selected,
+                    onSelected: (val) {
+                      setState(() {
+                        if (val) {
+                          item.sharedByUserIds.add(m.userId);
+                        } else if (item.sharedByUserIds.length > 1) {
+                          item.sharedByUserIds.remove(m.userId);
+                        }
+                      });
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildItemizedHint(double totalAmount) {
+    double itemsTotal = 0;
+    for (final item in _itemEntries) {
+      itemsTotal += double.tryParse(item.amountController.text) ?? 0;
+    }
+    final diff = totalAmount - itemsTotal;
+
+    if (diff.abs() < 0.01) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          '品項金額合計正確',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontSize: 13,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        diff > 0
+            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
+            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentSection(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        // Existing attachments (from server)
+        ..._existingAttachmentUrls.map((url) => _AttachmentThumbnail(
+              imageProvider: NetworkImage(url),
+              onRemove: () {
+                setState(() {
+                  _existingAttachmentUrls.remove(url);
+                  _removedAttachmentUrls.add(url);
+                });
+              },
+            )),
+        // New local attachments
+        ..._newAttachments.map((file) => _AttachmentThumbnail(
+              imageProvider: FileImage(file),
+              onRemove: () => setState(() => _newAttachments.remove(file)),
+            )),
+        // Add button
+        InkWell(
+          onTap: _pickAttachment,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.add_a_photo_outlined,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickAttachment() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('拍照'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('從相簿選取'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      setState(() => _newAttachments.add(File(picked.path)));
+    }
+  }
+
+  /// Upload new attachments and remove deleted ones. Returns final URL list.
+  Future<List<String>> _processAttachments(String expenseId) async {
+    final ds = ref.read(supabaseExpenseDataSourceProvider);
+
+    // Remove deleted attachments from storage
+    for (final url in _removedAttachmentUrls) {
+      try {
+        await ds.removeAttachment(url);
+      } catch (_) {
+        // Ignore storage removal errors
+      }
+    }
+
+    // Upload new attachments
+    final newUrls = <String>[];
+    for (final file in _newAttachments) {
+      final url = await ds.uploadAttachment(
+        expenseId: expenseId,
+        filePath: file.path,
+      );
+      newUrls.add(url);
+    }
+
+    return [..._existingAttachmentUrls, ...newUrls];
   }
 
   Future<void> _handleSubmit(String currency) async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedMemberIds.isEmpty) return;
+    if (_splitType != SplitType.itemized && _selectedMemberIds.isEmpty) return;
 
     final amount = double.parse(_amountController.text);
 
@@ -702,7 +1074,30 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       }
     }
 
+    // Validate itemized
+    if (_splitType == SplitType.itemized) {
+      if (_itemEntries.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('請至少新增一個品項')),
+        );
+        return;
+      }
+      double itemsTotal = 0;
+      for (final item in _itemEntries) {
+        itemsTotal += double.tryParse(item.amountController.text) ?? 0;
+      }
+      if ((amount - itemsTotal).abs() > 0.01) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('品項金額合計必須等於總金額')),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
+
+    final hasAttachmentChanges = _newAttachments.isNotEmpty ||
+        _removedAttachmentUrls.isNotEmpty;
 
     if (widget.isEditing) {
       final splits = _buildSplitsPayload(amount);
@@ -720,18 +1115,36 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
 
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
 
-      result.fold(
-        (failure) {
+      await result.fold(
+        (failure) async {
+          setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(failure.message)));
         },
-        (_) {
+        (_) async {
+          // Process attachments after successful update
+          if (hasAttachmentChanges) {
+            try {
+              final urls = await _processAttachments(widget.expenseId!);
+              final ds = ref.read(supabaseExpenseDataSourceProvider);
+              await ds.updateAttachmentUrls(
+                expenseId: widget.expenseId!,
+                urls: urls,
+              );
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('附件上傳失敗：$e')),
+                );
+              }
+            }
+          }
+          setState(() => _isSubmitting = false);
           ref.invalidate(expensesProvider(widget.groupId));
           ref.invalidate(expenseDetailProvider(widget.expenseId!));
-          context.pop();
+          if (mounted) context.pop();
         },
       );
     } else {
@@ -753,19 +1166,104 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
 
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
 
-      result.fold(
-        (failure) {
+      await result.fold(
+        (failure) async {
+          setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(failure.message)));
         },
-        (_) {
+        (expenseId) async {
+          // Process attachments after successful creation
+          if (hasAttachmentChanges) {
+            try {
+              final urls = await _processAttachments(expenseId);
+              final ds = ref.read(supabaseExpenseDataSourceProvider);
+              await ds.updateAttachmentUrls(
+                expenseId: expenseId,
+                urls: urls,
+              );
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('附件上傳失敗：$e')),
+                );
+              }
+            }
+          }
+          setState(() => _isSubmitting = false);
           ref.invalidate(expensesProvider(widget.groupId));
-          context.pop();
+          if (mounted) context.pop();
         },
       );
     }
+  }
+}
+
+class _ItemEntry {
+  _ItemEntry({
+    required this.nameController,
+    required this.amountController,
+    required this.sharedByUserIds,
+  });
+
+  final TextEditingController nameController;
+  final TextEditingController amountController;
+  final Set<String> sharedByUserIds;
+}
+
+class _AttachmentThumbnail extends StatelessWidget {
+  const _AttachmentThumbnail({
+    required this.imageProvider,
+    required this.onRemove,
+  });
+
+  final ImageProvider imageProvider;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image(
+            image: imageProvider,
+            width: 80,
+            height: 80,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.close,
+                size: 14,
+                color: Theme.of(context).colorScheme.onError,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

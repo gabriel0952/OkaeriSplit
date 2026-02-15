@@ -73,11 +73,11 @@ class _JoinGroupDialogState extends ConsumerState<JoinGroupDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        FilledButton.tonal(
           onPressed: _isLoading ? null : () => context.pop(),
           child: const Text('取消'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _isLoading ? null : _handleJoin,
           child: _isLoading
               ? const SizedBox(

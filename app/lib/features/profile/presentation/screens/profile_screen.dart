@@ -100,11 +100,48 @@ class ProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 32),
               OutlinedButton.icon(
-                onPressed: () => ref.read(signOutUseCaseProvider).call(),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('確認登出'),
+                      content: const Text('確定要登出嗎？'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('取消'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: TextButton.styleFrom(
+                            foregroundColor:
+                                Theme.of(context).colorScheme.error,
+                          ),
+                          child: const Text('登出'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    ref.read(signOutUseCaseProvider).call();
+                  }
+                },
                 icon: const Icon(Icons.logout),
                 label: const Text('登出'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _deleteAccount(context, ref),
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('刪除帳號'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
             ],
@@ -165,6 +202,77 @@ class ProfileScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已更新顯示名稱')),
         );
+      },
+    );
+  }
+
+  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('刪除帳號'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '此操作無法復原。您的所有資料將被永久刪除。',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('請輸入「刪除」以確認：'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: '刪除',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: controller.text.trim() == '刪除'
+                      ? () => Navigator.of(context).pop(true)
+                      : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: const Text('確認刪除'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final deleteAccount = ref.read(deleteAccountUseCaseProvider);
+    final result = await deleteAccount();
+
+    if (!context.mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('刪除失敗：${failure.message}')),
+        );
+      },
+      (_) {
+        // Account deleted, auth state change will redirect to login
       },
     );
   }

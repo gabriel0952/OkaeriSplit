@@ -3,8 +3,10 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/groups/presentation/widgets/invite_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/member_avatar.dart';
+import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,6 +108,97 @@ class GroupDetailScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // Quick summary card
+              Builder(builder: (context) {
+                final expensesAsync = ref.watch(expensesProvider(groupId));
+                final balancesAsync = ref.watch(balancesProvider(groupId));
+
+                final totalExpenses = expensesAsync.valueOrNull?.fold<double>(
+                      0,
+                      (sum, e) => sum + e.amount,
+                    ) ??
+                    0;
+                final unsettled = balancesAsync.valueOrNull?.fold<double>(
+                      0,
+                      (sum, b) =>
+                          sum + (b.netBalance > 0 ? b.netBalance : 0),
+                    ) ??
+                    0;
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text(
+                                '總支出',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${group.currency} ${totalExpenses.toStringAsFixed(0)}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 36,
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text(
+                                '未結算',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${group.currency} ${unsettled.toStringAsFixed(0)}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: unsettled > 0
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .error
+                                          : null,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
               const SizedBox(height: 24),
 
               // Members section

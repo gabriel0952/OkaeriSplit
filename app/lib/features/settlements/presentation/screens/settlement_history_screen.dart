@@ -24,8 +24,29 @@ class SettlementHistoryScreen extends ConsumerWidget {
         ),
         data: (settlements) {
           if (settlements.isEmpty) {
-            return const Center(
-              child: Text('目前沒有結算紀錄'),
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.history_outlined,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '目前沒有結算紀錄',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '完成付款後會顯示在這裡',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             );
           }
 

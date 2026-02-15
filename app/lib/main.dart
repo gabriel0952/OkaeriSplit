@@ -3,6 +3,7 @@ import 'package:app/core/theme/app_theme.dart';
 import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/routing/app_router.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,6 +39,16 @@ class OkaeriSplitApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      locale: const Locale('zh', 'TW'),
+      supportedLocales: const [
+        Locale('zh', 'TW'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
     );
   }
 }

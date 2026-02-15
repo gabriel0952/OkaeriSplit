@@ -67,7 +67,7 @@ class GroupListScreen extends ConsumerWidget {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton.small(
+          FloatingActionButton(
             heroTag: 'join',
             onPressed: () {
               showDialog(
@@ -75,7 +75,7 @@ class GroupListScreen extends ConsumerWidget {
                 builder: (_) => const JoinGroupDialog(),
               );
             },
-            child: const Icon(Icons.vpn_key_outlined),
+            child: const Icon(Icons.group_add_outlined),
           ),
           const SizedBox(height: 8),
           FloatingActionButton(

@@ -179,17 +179,87 @@
 
 ---
 
-## PRD P0 功能覆蓋對照
+## Milestone 5: UX 優化 ✅
 
-| PRD P0 功能 | Milestone | 任務 |
-|-------------|-----------|------|
-| 帳號註冊/登入（Email + Google + Apple） | M1 | 1.4 Auth Feature |
-| 建立/加入群組（邀請碼） | M2 | 2.1–2.4 |
-| 新增消費記錄 | M3 | 3.1–3.3 |
-| 消費分類 | M3 | 3.3 CategoryPicker |
-| 均分分帳 | M3 | 3.4 均分計算 |
-| 欠款總覽 | M4 | 4.3 BalanceScreen |
-| 手動標記已付款 | M4 | 4.3 標記付款 |
-| 基本 Dashboard | M4 | 4.4 Dashboard |
-| 自訂比例 / 指定金額分帳（P1） | M4 | 4.8 自訂分帳 |
-| Realtime 即時同步 | M4 | 4.6 Realtime 訂閱 |
+**目標**：提升使用體驗，改善既有功能的直覺性與一致性
+
+### 5.1 高優先 UX 修正 ✅
+- [x] 消費列表「總金額」摘要：頂部群組消費總額 Card + 每日小計
+- [x] 登入/註冊密碼顯示切換：眼睛 icon 切換 `obscureText`
+- [x] 登出確認 dialog：防止誤觸
+- [x] Social login loading 狀態：Google/Apple 登入時顯示 loading indicator
+
+### 5.2 中優先 UX 修正 ✅
+- [x] 硬編碼顏色改用 Theme：`Colors.green/red/grey` → `colorScheme.primary/error/onSurfaceVariant`（balance_card、settlement_card、debt_row、balance_screen、add_expense_screen）
+- [x] 空狀態一致性：settlement_history、balance_screen 加入圖示 + 引導文字
+- [x] 群組詳情快速摘要：顯示群組總支出 & 未結算金額
+- [x] 加入群組 FAB icon：`vpn_key` → `group_add` 更直覺
+
+**交付物**：✅ 8 項 UX 改善全部完成，`flutter analyze` 零錯誤
+
+---
+
+## Milestone 6: 搜尋篩選、收據附件、項目拆分 ✅
+
+**目標**：實作三個新功能，對應 PRD P2 範圍
+
+### 6.1 消費搜尋 & 篩選 ✅
+- [x] `ExpenseListScreen` 改為 `ConsumerStatefulWidget`，新增可收合篩選面板
+- [x] 關鍵字搜尋（描述文字）
+- [x] 分類篩選（FilterChip 多選）
+- [x] 付款人篩選（Dropdown）
+- [x] 日期範圍篩選（DateRangePicker）
+- [x] 篩選結果的總額 & 筆數顯示
+- [x] 清除篩選按鈕 + 無結果空狀態
+- [x] 純前端本地篩選，不需後端改動
+
+### 6.2 收據/照片附件 ✅
+- [x] `ExpenseEntity` 新增 `attachmentUrls` 欄位
+- [x] `SupabaseExpenseDataSource` 新增 `uploadAttachment()`、`removeAttachment()`、`updateAttachmentUrls()`
+- [x] `AddExpenseScreen` 新增拍照/相簿選取按鈕、附件縮圖 + 刪除
+- [x] `ExpenseDetailScreen` 顯示附件圖片（水平滾動 + 點擊放大）
+- [x] 新增 `image_picker` 依賴
+- [x] SQL migration：`expenses` 表新增 `attachment_urls TEXT[]`
+- [ ] **待手動處理**：Supabase Storage 建立 `receipts` bucket + RLS policy
+
+### 6.3 項目拆分分帳 ✅
+- [x] `SplitType.itemized` 新增至 enum
+- [x] `ExpenseItemEntity` 新增（name、amount、sharedByUserIds）
+- [x] `AddExpenseScreen` 新增項目拆分模式 UI（新增/刪除品項、品項金額、分攤者 FilterChip）
+- [x] 項目金額合計驗證（必須等於總金額）
+- [x] 自動彙算各成員分攤金額（均分各品項 → 加總 per user）
+- [x] SQL migration：`expense_items` 表 + RLS policy
+- [ ] **待手動處理**：執行 SQL migration 至 Supabase
+
+**交付物**：✅ 3 個新功能全部完成，`flutter analyze` 零錯誤、48 項測試全過
+
+---
+
+## PRD 功能覆蓋對照
+
+| PRD 功能 | 優先級 | Milestone | 狀態 |
+|----------|--------|-----------|------|
+| 帳號註冊/登入（Email + Google + Apple） | P0 | M1 | ✅ |
+| 建立/加入群組（邀請碼） | P0 | M2 | ✅ |
+| 新增消費記錄 | P0 | M3 | ✅ |
+| 消費分類（含自訂分類） | P0 | M3 | ✅ |
+| 均分分帳 | P0 | M3 | ✅ |
+| 欠款總覽 | P0 | M4 | ✅ |
+| 手動標記已付款 | P0 | M4 | ✅ |
+| 基本 Dashboard | P0 | M4 | ✅ |
+| 自訂比例 / 指定金額分帳 | P1 | M4 | ✅ |
+| 多幣別支援 | P1 | M4 | ✅ |
+| 搜尋用戶邀請 | P1 | M4 | ✅ |
+| 最簡化轉帳演算法 | P1 | M4 | ✅ |
+| 群組消費統計 | P1 | M4 | ✅ |
+| Realtime 即時同步 | P1 | M4 | ✅ |
+| 深色模式 | P1 | M4 | ✅ |
+| 刪除群組 | P1 | M4 | ✅ |
+| 項目拆分分帳 | P2 | M6 | ✅ |
+| 收據/照片附件 | P2 | M6 | ✅ |
+| 消費搜尋 & 篩選 | — | M6 | ✅ |
+| UX 優化（8 項） | — | M5 | ✅ |
+| 推播通知 | P2 | — | ❌ 未開始 |
+| i18n 多語系 | P2 | — | ❌ 未開始 |
+| 金流串接 | P2 | — | ❌ 未開始 |
+| 離線快取 & 同步 | — | — | ❌ 未開始 |

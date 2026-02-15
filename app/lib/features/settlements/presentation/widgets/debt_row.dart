@@ -43,7 +43,9 @@ class DebtRow extends StatelessWidget {
           Text(
             '${isPositive ? '+' : ''}$currency ${balance.netBalance.toStringAsFixed(0)}',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: isPositive ? Colors.green : Colors.red,
+                  color: isPositive
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.error,
                   fontWeight: FontWeight.bold,
                 ),
           ),

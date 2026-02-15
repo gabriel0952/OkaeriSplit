@@ -45,8 +45,29 @@ class BalanceScreen extends ConsumerWidget {
         ),
         data: (balances) {
           if (balances.isEmpty) {
-            return const Center(
-              child: Text('目前沒有帳務資料'),
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '目前沒有帳務資料',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '新增消費後即可查看帳務總覽',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             );
           }
 
@@ -72,12 +93,16 @@ class BalanceScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Card(
                   child: simplifiedDebts.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(16),
+                      ? Padding(
+                          padding: const EdgeInsets.all(16),
                           child: Center(
                             child: Text(
                               '已全部結清！',
-                              style: TextStyle(color: Colors.grey),
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                             ),
                           ),
                         )

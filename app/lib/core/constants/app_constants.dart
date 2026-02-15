@@ -41,7 +41,8 @@ enum GroupType {
 enum SplitType {
   equal('均分'),
   customRatio('自訂比例'),
-  fixedAmount('指定金額');
+  fixedAmount('指定金額'),
+  itemized('項目拆分');
 
   const SplitType(this.label);
   final String label;

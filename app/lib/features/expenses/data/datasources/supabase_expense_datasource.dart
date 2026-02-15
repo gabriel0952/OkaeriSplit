@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
@@ -120,10 +122,63 @@ class SupabaseExpenseDataSource {
     await _client.from('group_categories').delete().eq('id', categoryId);
   }
 
+  // --- Attachment helpers ---
+
+  /// Upload a receipt image to Supabase Storage and return its public URL.
+  Future<String> uploadAttachment({
+    required String expenseId,
+    required String filePath,
+  }) async {
+    final file = File(filePath);
+    final bytes = await file.readAsBytes();
+    final ext = filePath.split('.').last.toLowerCase();
+    final storagePath =
+        '$expenseId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+    final mimeType = switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'heic' => 'image/heic',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+
+    await _client.storage.from('receipts').uploadBinary(
+      storagePath,
+      bytes,
+      fileOptions: FileOptions(contentType: mimeType),
+    );
+
+    final publicUrl =
+        _client.storage.from('receipts').getPublicUrl(storagePath);
+    return publicUrl;
+  }
+
+  /// Remove an attachment from storage by its public URL.
+  Future<void> removeAttachment(String publicUrl) async {
+    // Extract the storage path from the public URL.
+    final marker = '/object/public/receipts/';
+    final idx = publicUrl.indexOf(marker);
+    if (idx < 0) return;
+    final path = publicUrl.substring(idx + marker.length);
+    await _client.storage.from('receipts').remove([path]);
+  }
+
+  /// Update the attachment_urls column on an expense row.
+  Future<void> updateAttachmentUrls({
+    required String expenseId,
+    required List<String> urls,
+  }) async {
+    await _client
+        .from('expenses')
+        .update({'attachment_urls': urls}).eq('id', expenseId);
+  }
+
   // --- Mapping helpers ---
 
   ExpenseEntity _mapExpense(Map<String, dynamic> data) {
     final splitsData = data['expense_splits'] as List? ?? [];
+    final attachments = data['attachment_urls'] as List?;
     return ExpenseEntity(
       id: data['id'] as String,
       groupId: data['group_id'] as String,
@@ -137,6 +192,8 @@ class SupabaseExpenseDataSource {
       createdAt: DateTime.parse(data['created_at'] as String),
       updatedAt: DateTime.parse(data['updated_at'] as String),
       splits: splitsData.map(_mapSplit).toList(),
+      attachmentUrls:
+          attachments?.map((e) => e as String).toList() ?? const [],
     );
   }
 

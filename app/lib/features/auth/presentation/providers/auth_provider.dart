@@ -5,6 +5,7 @@ import 'package:app/features/auth/domain/repositories/auth_repository.dart';
 import 'package:app/features/auth/domain/usecases/get_current_user.dart';
 import 'package:app/features/auth/domain/usecases/sign_in.dart';
 import 'package:app/features/auth/domain/usecases/sign_out.dart';
+import 'package:app/features/auth/domain/usecases/delete_account.dart';
 import 'package:app/features/auth/domain/usecases/sign_up.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,10 @@ final signUpUseCaseProvider = Provider<SignUp>((ref) {
 
 final signOutUseCaseProvider = Provider<SignOut>((ref) {
   return SignOut(ref.watch(authRepositoryProvider));
+});
+
+final deleteAccountUseCaseProvider = Provider<DeleteAccount>((ref) {
+  return DeleteAccount(ref.watch(authRepositoryProvider));
 });
 
 final getCurrentUserUseCaseProvider = Provider<GetCurrentUser>((ref) {

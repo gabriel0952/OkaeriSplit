@@ -16,6 +16,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _isSocialLoading = false;
+  String? _socialProvider;
   String? _errorMessage;
 
   @override
@@ -100,11 +103,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: '密碼',
-                      prefixIcon: Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscurePassword = !_obscurePassword),
+                      ),
                     ),
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     autofillHints: const [AutofillHints.password],
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -155,19 +167,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 24),
                   SocialLoginButton.google(
-                    onPressed: () {
-                      ref
-                          .read(supabaseAuthDataSourceProvider)
-                          .signInWithGoogle();
-                    },
+                    isLoading:
+                        _isSocialLoading && _socialProvider == 'google',
+                    onPressed: _isSocialLoading
+                        ? null
+                        : () async {
+                            setState(() {
+                              _isSocialLoading = true;
+                              _socialProvider = 'google';
+                              _errorMessage = null;
+                            });
+                            try {
+                              await ref
+                                  .read(supabaseAuthDataSourceProvider)
+                                  .signInWithGoogle();
+                            } catch (_) {
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isSocialLoading = false);
+                              }
+                            }
+                          },
                   ),
                   const SizedBox(height: 12),
                   SocialLoginButton.apple(
-                    onPressed: () {
-                      ref
-                          .read(supabaseAuthDataSourceProvider)
-                          .signInWithApple();
-                    },
+                    isLoading:
+                        _isSocialLoading && _socialProvider == 'apple',
+                    onPressed: _isSocialLoading
+                        ? null
+                        : () async {
+                            setState(() {
+                              _isSocialLoading = true;
+                              _socialProvider = 'apple';
+                              _errorMessage = null;
+                            });
+                            try {
+                              await ref
+                                  .read(supabaseAuthDataSourceProvider)
+                                  .signInWithApple();
+                            } catch (_) {
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isSocialLoading = false);
+                              }
+                            }
+                          },
                   ),
                 ],
               ),

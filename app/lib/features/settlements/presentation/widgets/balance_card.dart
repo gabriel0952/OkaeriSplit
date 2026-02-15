@@ -42,7 +42,7 @@ class BalanceCard extends StatelessWidget {
                     label: '應收',
                     amount: totalReceivable,
                     currency: currency,
-                    color: Colors.green,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 Expanded(
@@ -50,7 +50,7 @@ class BalanceCard extends StatelessWidget {
                     label: '應付',
                     amount: totalPayable,
                     currency: currency,
-                    color: Colors.red,
+                    color: Theme.of(context).colorScheme.error,
                   ),
                 ),
                 Expanded(
@@ -58,7 +58,9 @@ class BalanceCard extends StatelessWidget {
                     label: '淨額',
                     amount: net,
                     currency: currency,
-                    color: net >= 0 ? Colors.green : Colors.red,
+                    color: net >= 0
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.error,
                   ),
                 ),
               ],
