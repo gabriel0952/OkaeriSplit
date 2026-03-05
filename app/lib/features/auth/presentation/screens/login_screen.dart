@@ -181,7 +181,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               await ref
                                   .read(supabaseAuthDataSourceProvider)
                                   .signInWithGoogle();
-                            } catch (_) {
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() => _errorMessage = e.toString());
+                              }
                             } finally {
                               if (mounted) {
                                 setState(() => _isSocialLoading = false);
@@ -205,7 +208,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               await ref
                                   .read(supabaseAuthDataSourceProvider)
                                   .signInWithApple();
-                            } catch (_) {
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() => _errorMessage = e.toString());
+                              }
                             } finally {
                               if (mounted) {
                                 setState(() => _isSocialLoading = false);

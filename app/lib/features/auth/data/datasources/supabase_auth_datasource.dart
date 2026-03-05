@@ -1,4 +1,10 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:app/features/auth/domain/entities/user_entity.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseAuthDataSource {
@@ -48,16 +54,44 @@ class SupabaseAuthDataSource {
   }
 
   Future<void> signInWithGoogle() async {
-    await _client.auth.signInWithOAuth(OAuthProvider.google);
+    final res = await _client.auth.getOAuthSignInUrl(
+      provider: OAuthProvider.google,
+      redirectTo: 'com.raycat.okaerisplit://login-callback',
+    );
+
+    final result = await FlutterWebAuth2.authenticate(
+      url: res.url,
+      callbackUrlScheme: 'com.raycat.okaerisplit',
+    );
+
+    await _client.auth.getSessionFromUrl(Uri.parse(result));
+  }
+
+  Future<void> signInWithApple() async {
+    final rawNonce = _generateRandomString();
+    final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
+
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: hashedNonce,
+    );
+
+    final idToken = credential.identityToken;
+    if (idToken == null) throw AuthException('No ID token from Apple');
+
+    await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.apple,
+      idToken: idToken,
+      nonce: rawNonce,
+    );
   }
 
   Future<void> deleteAccount() async {
     await _client.rpc('delete_user_account');
     await _client.auth.signOut();
-  }
-
-  Future<void> signInWithApple() async {
-    await _client.auth.signInWithOAuth(OAuthProvider.apple);
   }
 
   UserEntity _mapUser(User user) {
@@ -70,5 +104,15 @@ class SupabaseAuthDataSource {
           '',
       avatarUrl: user.userMetadata?['avatar_url'] as String?,
     );
+  }
+
+  static String _generateRandomString([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
   }
 }
