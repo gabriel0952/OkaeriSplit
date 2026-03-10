@@ -1,7 +1,7 @@
 name: app
 description: "OkaeriSplit - 群組分帳 App"
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.11.0
@@ -40,7 +40,7 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/Frame 13.png"
+  image_path: "assets/icon/Frame 14.png"
   min_sdk_android: 24
   remove_alpha_ios: true
 
