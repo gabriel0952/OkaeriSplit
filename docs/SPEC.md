@@ -43,7 +43,7 @@
 | 寫入 | Remote-first | 直接寫入 Supabase，失敗時回傳錯誤提示 |
 | 讀取 | Remote-first | 直接從 Supabase 讀取，透過 Riverpod 快取 |
 | 即時更新 | Supabase Realtime | 訂閱群組相關表格變更，自動 invalidate Provider |
-| 離線 | 暫不支援 | Hive 本地快取為未來規劃，目前需網路連線 |
+| 離線 | 待實作（M9） | Hive 快取群組/消費；無網路可瀏覽快取 & 新增消費（pending queue），網路恢復後自動同步 |
 
 ---
 
@@ -1085,3 +1085,234 @@ Scaffold
 - 文字：「新增消費」/ 「儲存變更」
 - Disabled 條件：金額 ≤ 0 **或** 描述空白
 - Loading 狀態：顯示 `CircularProgressIndicator(strokeWidth: 2)`
+
+---
+
+## 10. iOS Home Widget 規格
+
+### 10.1 功能定位
+
+- 使用者在桌面不打開 App 即可看到自己的群組清單
+- 點擊 [+ 記帳] → 深度連結開啟 App 並跳到該群組的 AddExpenseScreen
+- 僅支援 iOS（WidgetKit，Medium size）
+
+### 10.2 技術架構
+
+```
+Flutter App ──寫入──▶ App Group UserDefaults ◀──讀取── WidgetKit Extension (Swift)
+     │                                                          │
+     │                                              顯示群組清單 + 按鈕
+     │
+     ◀──URL Scheme────────────────────────────── 使用者點擊按鈕
+  app_links 攔截
+  GoRouter 導航至 /groups/:id/add-expense
+```
+
+### 10.3 元件清單
+
+| 元件 | 位置 | 說明 |
+|------|------|------|
+| `home_widget` 套件 | pubspec.yaml | Flutter ↔ Native 橋接 |
+| `app_links` 套件 | pubspec.yaml | 深度連結攔截（URL scheme 已存在） |
+| Widget Extension | ios/OkaeriSplitWidget/ | Swift WidgetKit Extension |
+| App Group | Xcode Capabilities | 共享 UserDefaults 容器（`group.com.raycat.okaerisplit`） |
+| `HomeWidgetService` | lib/core/services/ | Flutter 端寫入 App Group 的 service |
+
+### 10.4 App Group 資料格式
+
+Flutter 在以下時機將資料寫入 App Group UserDefaults：
+- App 啟動時
+- `groupsProvider` 資料更新時
+
+```json
+{
+  "groups": [
+    { "id": "uuid-1", "name": "旅行群組", "currency": "TWD" },
+    { "id": "uuid-2", "name": "室友群組", "currency": "TWD" }
+  ],
+  "lastUpdated": "2026-03-11T10:00:00Z"
+}
+```
+
+### 10.5 Widget UI（Medium size，SwiftUI）
+
+```
+┌──────────────────────────────┐
+│  OkaeriSplit    [圖示]        │
+│  ────────────────────────── │
+│  旅行群組   TWD    [+ 記帳]   │
+│  室友群組   TWD    [+ 記帳]   │
+│  活動群組   TWD    [+ 記帳]   │
+└──────────────────────────────┘
+```
+
+- 最多顯示 3 組（Medium size），超過顯示「...」
+- 無群組時顯示「開啟 App 建立群組」
+- [+ 記帳] 按鈕觸發 URL：`com.raycat.okaerisplit://add-expense?groupId=<id>`
+
+### 10.6 Deep Link 處理（Flutter 端）
+
+URL scheme `com.raycat.okaerisplit://` 已在 Info.plist 註冊（auth 用）。新增 `/add-expense` path 的處理：
+
+```
+app_links 監聽 → AppRouter 解析 URL
+  com.raycat.okaerisplit://add-expense?groupId=xxx
+  → context.push('/groups/xxx/add-expense')
+```
+
+### 10.7 HomeWidgetService 介面（Dart）
+
+```dart
+class HomeWidgetService {
+  static const _appGroupId = 'group.com.raycat.okaerisplit';
+
+  Future<void> init() async {
+    await HomeWidget.setAppGroupId(_appGroupId);
+  }
+
+  /// 將群組列表寫入 App Group UserDefaults（Widget 讀取用）
+  Future<void> updateGroups(List<GroupEntity> groups) async {
+    final payload = {
+      'groups': groups.take(3).map((g) => {
+        'id': g.id,
+        'name': g.name,
+        'currency': g.currency,
+      }).toList(),
+      'lastUpdated': DateTime.now().toIso8601String(),
+    };
+    await HomeWidget.saveWidgetData('groups_payload', jsonEncode(payload));
+    await HomeWidget.updateWidget(
+      iOSName: 'OkaeriSplitWidget',
+    );
+  }
+}
+```
+
+### 10.8 iOS 設定步驟（需手動）
+
+1. Xcode → File → New → Target → Widget Extension（命名 `OkaeriSplitWidget`）
+2. Runner + OkaeriSplitWidget 皆加入同一 App Group：`group.com.raycat.okaerisplit`
+3. Swift Widget 程式碼從 App Group UserDefaults 讀取群組列表，渲染 SwiftUI View
+4. Flutter `home_widget` 初始化時呼叫 `HomeWidget.setAppGroupId('group.com.raycat.okaerisplit')`
+
+---
+
+## 11. 離線記帳與自動同步規格
+
+### 11.1 功能定位
+
+- 無網路時仍可新增消費（存本地），並可瀏覽上次快取的群組/消費列表
+- 網路恢復後自動將待同步消費上傳 Supabase
+- 消費列表 AppBar 顯示「待同步 N 筆」Badge
+
+### 11.2 技術架構
+
+```
+有網路時：
+  Supabase ──讀取──▶ Riverpod Provider ──渲染──▶ UI
+                          │
+                          └──寫入──▶ Hive Cache（自動更新）
+
+無網路時：
+  Hive Cache ──讀取──▶ Riverpod Provider ──渲染──▶ UI（顯示快取資料）
+
+新增消費（無網路）：
+  UI ──▶ PendingExpenseRepository ──寫入──▶ Hive pending_expenses box
+
+網路恢復：
+  ConnectivityService 偵測 ──▶ SyncService.flush() ──▶ Supabase
+                                                       ──▶ invalidate Providers
+```
+
+### 11.3 新增套件
+
+| 套件 | 用途 |
+|------|------|
+| `connectivity_plus` | 監聽網路連線狀態 |
+
+### 11.4 Hive Box 結構
+
+Hive 已安裝，新增以下 Box：
+
+| Box 名稱 | 資料型態 | 說明 |
+|----------|----------|------|
+| `groups_cache` | JSON string | 群組列表快取 |
+| `expenses_cache` | JSON string（key: groupId） | 各群組消費列表快取 |
+| `group_members_cache` | JSON string（key: groupId） | 成員列表快取（離線新增消費時需要） |
+| `pending_expenses` | JSON string list | 待上傳的消費佇列 |
+
+### 11.5 PendingExpenseDto 資料結構
+
+```dart
+class PendingExpenseDto {
+  final String localId;      // UUID，本地暫時 ID
+  final String groupId;
+  final String paidBy;
+  final double amount;
+  final String currency;
+  final String category;
+  final String description;
+  final String? note;
+  final DateTime expenseDate;
+  final List<Map<String, dynamic>> splits;
+  final DateTime pendingAt;
+}
+```
+
+### 11.6 元件清單
+
+| 元件 | 位置 | 說明 |
+|------|------|------|
+| `ConnectivityService` | lib/core/services/ | 監聽連線狀態，提供 `isOnline` stream |
+| `connectivityProvider` | lib/core/providers/ | Riverpod 包裝 ConnectivityService |
+| `SyncService` | lib/core/services/ | 處理 pending_expenses 上傳佇列 |
+| `PendingExpenseRepository` | lib/features/expenses/data/ | 讀寫 Hive pending_expenses box |
+| `HiveGroupDataSource` | lib/features/groups/data/datasources/ | 快取群組列表（已存在但空白） |
+| `HiveExpenseDataSource` | lib/features/expenses/data/datasources/ | 快取消費列表 |
+
+### 11.7 Repository 讀取邏輯
+
+**GroupRepositoryImpl**（讀取）:
+```
+isOnline?
+  ├── 是 → 讀 Supabase → 寫 Hive cache → 回傳
+  └── 否 → 讀 Hive cache（無快取則回傳空列表 + offline 標記）
+```
+
+**ExpenseRepositoryImpl**（讀取）:
+```
+isOnline?
+  ├── 是 → 讀 Supabase → 寫 Hive cache → 回傳
+  └── 否 → 讀 Hive cache（無快取則回傳空列表 + offline 標記）
+```
+
+**ExpenseRepositoryImpl**（新增消費）:
+```
+isOnline?
+  ├── 是 → 直接送 Supabase RPC → 完成
+  └── 否 → 存入 Hive pending_expenses → 回傳成功（UI 顯示「已離線儲存」）
+```
+
+### 11.8 SyncService 流程
+
+```dart
+// 網路恢復時觸發
+Future<void> flush() async {
+  final pending = await _pendingRepo.getAll();
+  for (final item in pending) {
+    try {
+      await _supabaseDs.createExpense(/* item 資料 */);
+      await _pendingRepo.remove(item.localId);
+    } catch (e) {
+      // 保留，下次再試
+    }
+  }
+  // 完成後 invalidate providers
+}
+```
+
+### 11.9 UI 變更
+
+- **ExpenseListScreen AppBar**：當 `pendingCount > 0` 時顯示 `待同步 N 筆` 的小 Chip（`pendingSyncBadge`）
+- **新增消費成功（離線）**：SnackBar 顯示「已離線儲存，稍後將自動同步」
+- **離線時新增消費**：付款人 / 分攤成員從 `group_members_cache` 讀取，其餘流程與線上相同

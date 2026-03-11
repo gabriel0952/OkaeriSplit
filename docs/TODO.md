@@ -229,7 +229,7 @@
 - [x] 項目金額合計驗證（必須等於總金額）
 - [x] 自動彙算各成員分攤金額（均分各品項 → 加總 per user）
 - [x] SQL migration：`expense_items` 表 + RLS policy
-- [ ] **待手動處理**：執行 SQL migration 至 Supabase
+- [x] **手動處理**：執行 SQL migration 至 Supabase
 
 **交付物**：✅ 3 個新功能全部完成，`flutter analyze` 零錯誤、48 項測試全過
 
@@ -241,59 +241,147 @@
 
 ### 7.1 Design System & Theme 更新
 
-- [ ] `app_theme.dart`：更新色彩系統（背景 #F5F5F7、卡片白色、主色 Indigo #4F46E5）
-- [ ] `app_theme.dart`：Typography 調整（letterSpacing 收緊、fontWeight 層次）
-- [ ] `app_theme.dart`：CardTheme（圓角 16px、無 elevation/shadow）
-- [ ] `app_theme.dart`：AppBar（elevation:0、scrolledUnderElevation:0、背景融合底色）
-- [ ] `app_theme.dart`：FilledButton（圓角 14px、高度 52px）
-- [ ] `app_theme.dart`：NavigationBar（白底、0.5px 頂線、輕量 indicator）
-- [ ] `app_theme.dart`：同步更新 Dark theme 對應設定
+- [x] `app_theme.dart`：更新色彩系統（背景 #F5F5F7、卡片白色、主色 Indigo #4F46E5）
+- [x] `app_theme.dart`：Typography 調整（letterSpacing 收緊、fontWeight 層次）
+- [x] `app_theme.dart`：CardTheme（圓角 16px、無 elevation/shadow）
+- [x] `app_theme.dart`：AppBar（elevation:0、scrolledUnderElevation:0、背景融合底色）
+- [x] `app_theme.dart`：FilledButton（圓角 14px、高度 52px）
+- [x] `app_theme.dart`：NavigationBar（白底、0.5px 頂線、輕量 indicator）
+- [x] `app_theme.dart`：同步更新 Dark theme 對應設定
 
 ### 7.2 Shell & 全域元件更新
 
-- [ ] `main_shell.dart`：NavigationBar 加上頂部細線分隔、更新 icon 至 rounded 系列
-- [ ] `balance_summary_card.dart`：使用語義色（正值 #16A34A、負值 #DC2626）、卡片樣式升級
-- [ ] `expense_card.dart`：視覺升級（圓角、分類色彩、排版改善）
-- [ ] `group_card.dart`：視覺升級
+- [x] `main_shell.dart`：NavigationBar 加上頂部細線分隔、更新 icon 至 rounded 系列
+- [x] `balance_summary_card.dart`：使用語義色（正值 #16A34A、負值 #DC2626）、卡片樣式升級
+- [x] `expense_card.dart`：視覺升級（圓角、分類色彩、排版改善）
+- [x] `group_card.dart`：視覺升級
 
 ### 7.3 新增消費畫面重構（Progressive Disclosure）
 
 詳細規格見 `SPEC.md §9`
 
 **[A] 金額區**
-- [ ] 移除原本的 `TextFormField`，改為 `GestureDetector` 包裹的 Display widget
-- [ ] 隱藏 `TextField` 用於接收輸入，`FocusNode` 管理 focus
-- [ ] 金額 Display：fontSize 48、fontWeight 700、letterSpacing -1.0
-- [ ] 輸入限制：`FilteringTextInputFormatter`，只允許數字與一個小數點、小數點後 ≤ 2 位
-- [ ] 幣別：小型 Chip，de-emphasize 樣式，點擊彈出幣別選擇器
+- [x] 移除原本的 `TextFormField`，改為 `GestureDetector` 包裹的 Display widget
+- [x] 隱藏 `TextField` 用於接收輸入，`FocusNode` 管理 focus
+- [x] 金額 Display：fontSize 48、fontWeight 700、letterSpacing -1.0
+- [x] 輸入限制：`FilteringTextInputFormatter`，只允許數字與一個小數點、小數點後 ≤ 2 位
+- [x] 幣別：小型 Chip，de-emphasize 樣式，點擊彈出幣別選擇器
 
 **[B1] 描述 + 分類卡**
-- [ ] 描述改為無 border 的 TextField（卡片內整行），分類在下方
-- [ ] 分類選擇器改為橫向可滑動 `ListView`（替換原 Wrap）
-- [ ] 分類 Item：60×64px 圓角 tile，icon 上 label 下，選中主色填底
-- [ ] 右側固定「+ 自訂」按鈕（不隨分類列表捲動）
+- [x] 描述改為無 border 的 TextField（卡片內整行），分類在下方
+- [x] 分類選擇器改為橫向可滑動 `ListView`（替換原 Wrap）
+- [x] 分類 Item：60×64px 圓角 tile，icon 上 label 下，選中主色填底
+- [x] 右側固定「+ 自訂」按鈕（不隨分類列表捲動）
 
 **[B2] 付款人卡**
-- [ ] 移除 `DropdownButton`，改為頭像 Chip 單選（顯示 CircleAvatar + 名字）
-- [ ] 選中狀態：主色邊框 + ✓ icon
+- [x] 移除 `DropdownButton`，改為頭像 Chip 單選（顯示 CircleAvatar + 名字）
+- [x] 選中狀態：主色邊框 + ✓ icon
 
 **[B3] 分攤卡**
-- [ ] 分攤成員：移除 `CheckboxListTile`，改為頭像 Chip 多選
-- [ ] 即時摘要文字（均分金額 / 非均分模式說明）
-- [ ] 分帳方式改為 `ExpansionTile`（預設折疊）
-- [ ] 折疊 header 顯示目前分帳方式摘要（含比例/金額細節）
-- [ ] 展開後：RadioListTile 四選一，選中非均分後 inline 展開對應輸入 UI
+- [x] 分攤成員：移除 `CheckboxListTile`，改為頭像 Chip 多選
+- [x] 即時摘要文字（均分金額 / 非均分模式說明）
+- [x] 分帳方式改為 `ExpansionTile`（預設折疊）
+- [x] 折疊 header 顯示目前分帳方式摘要（含比例/金額細節）
+- [x] 展開後：RadioListTile 四選一，選中非均分後 inline 展開對應輸入 UI
 
 **[B4] 更多選項**
-- [ ] `ExpansionTile` 包裹：日期、備註、附件
-- [ ] 日期移入此區（預設今天，不再佔用主表單空間）
-- [ ] 編輯模式且有備註或附件時，預設 `initiallyExpanded: true`
+- [x] `ExpansionTile` 包裹：日期、備註、附件
+- [x] 日期移入此區（預設今天，不再佔用主表單空間）
+- [x] 編輯模式且有備註或附件時，預設 `initiallyExpanded: true`
 
 **[C] 底部按鈕**
-- [ ] 固定在 `SafeArea` 底部（不隨表單捲動）
-- [ ] Disabled 條件：金額 ≤ 0 **或** 描述空白
+- [x] 固定在 `SafeArea` 底部（不隨表單捲動）
+- [x] Disabled 條件：金額 ≤ 0 **或** 描述空白
 
 **交付物**：視覺全面升級、新增消費常用路徑縮短至 3 步、`flutter analyze` 零錯誤、既有測試全過
+
+---
+
+---
+
+## Milestone 8: iOS Home Widget
+
+**目標**：在 iOS 桌面顯示群組列表，點擊按鈕直接跳到新增消費畫面
+
+> ⚠️ 需搭配手動 Xcode 設定（Widget Extension + App Group）
+
+### 8.1 套件與 Flutter 端 Service
+
+- [ ] `pubspec.yaml` 新增 `home_widget`、`app_links`
+- [ ] `lib/core/services/home_widget_service.dart`：初始化 App Group、寫入群組 JSON、呼叫 `updateWidget`
+- [ ] `groupsProvider` 更新時觸發 `HomeWidgetService.updateGroups()`
+- [ ] App 啟動時呼叫一次 `HomeWidgetService.init()` + `updateGroups()`
+
+### 8.2 Deep Link 處理
+
+- [ ] `app_links` 初始化（在 `main.dart` 或 `AppRouter`）
+- [ ] 監聽 `com.raycat.okaerisplit://add-expense?groupId=xxx` → `context.push('/groups/xxx/add-expense')`
+- [ ] 測試：點擊 Widget 按鈕後 App 正確導航
+
+### 8.3 iOS Widget Extension（Swift，需手動）
+
+- [ ] Xcode → New Target → Widget Extension（`OkaeriSplitWidget`）
+- [ ] Runner + OkaeriSplitWidget 加入 App Group：`group.com.raycat.okaerisplit`
+- [ ] Swift：從 App Group UserDefaults 讀取 `groups_payload` JSON
+- [ ] SwiftUI：Medium Widget，顯示最多 3 組 + [+ 記帳] 按鈕
+- [ ] 無群組時顯示引導文字
+- [ ] [+ 記帳] 觸發 `Link(destination: URL(string: "com.raycat.okaerisplit://add-expense?groupId=..."))`
+
+**交付物**：Widget 顯示群組列表，點擊按鈕開啟 App 並跳到正確群組的新增消費頁
+
+---
+
+## Milestone 9: 離線記帳 + 自動同步
+
+**目標**：無網路時可新增消費與瀏覽快取，網路恢復後自動同步
+
+> 純 Flutter/Dart 實作，無需手動 native 設定
+
+### 9.1 基礎建設
+
+- [ ] `pubspec.yaml` 新增 `connectivity_plus`
+- [ ] `lib/core/services/connectivity_service.dart`：包裝 `connectivity_plus`，提供 `isOnline` getter 與 `onConnectivityChanged` stream
+- [ ] `lib/core/providers/connectivity_provider.dart`：`StreamProvider<bool>`，暴露連線狀態
+
+### 9.2 Hive 快取層
+
+- [ ] `lib/features/groups/data/datasources/hive_group_datasource.dart`：
+  - `saveGroups(List<GroupModel>)` → box `groups_cache`
+  - `getGroups()` → 讀取 `groups_cache`
+  - `saveGroupMembers(groupId, List<GroupMemberModel>)` → box `group_members_cache`
+  - `getGroupMembers(groupId)` → 讀取 `group_members_cache`
+- [ ] `lib/features/expenses/data/datasources/hive_expense_datasource.dart`：
+  - `saveExpenses(groupId, List<ExpenseModel>)` → box `expenses_cache`（key: groupId）
+  - `getExpenses(groupId)` → 讀取 `expenses_cache`
+- [ ] `lib/features/expenses/data/repositories/pending_expense_repository.dart`：
+  - `add(PendingExpenseDto)` → box `pending_expenses`
+  - `getAll()` → 讀全部
+  - `remove(localId)` → 刪除單筆
+
+### 9.3 PendingExpenseDto
+
+- [ ] `lib/features/expenses/data/models/pending_expense_dto.dart`（freezed + json）
+  - 欄位：`localId`, `groupId`, `paidBy`, `amount`, `currency`, `category`, `description`, `note`, `expenseDate`, `splits`, `pendingAt`
+
+### 9.4 Repository 離線邏輯
+
+- [ ] `GroupRepositoryImpl` 修改讀取邏輯：有網路 → Supabase + 寫 Hive；無網路 → 讀 Hive
+- [ ] `ExpenseRepositoryImpl` 修改讀取邏輯：有網路 → Supabase + 寫 Hive；無網路 → 讀 Hive
+- [ ] `ExpenseRepositoryImpl` 修改新增邏輯：無網路 → 存入 `pending_expenses`，回傳成功
+
+### 9.5 SyncService
+
+- [ ] `lib/core/services/sync_service.dart`：
+  - `flush()` — 逐筆上傳 pending，成功後刪除，完成後 invalidate providers
+  - 連線狀態變更時（`ConnectivityService` stream）自動觸發 `flush()`
+
+### 9.6 UI 變更
+
+- [ ] `ExpenseListScreen` AppBar：新增 `pendingSyncBadge`（`pendingCount > 0` 時顯示 `待同步 N 筆` Chip）
+- [ ] 離線新增消費成功後 SnackBar 顯示「已離線儲存，稍後將自動同步」
+- [ ] `pendingCountProvider`：`FutureProvider<int>`，讀取 `PendingExpenseRepository.getAll().length`
+
+**交付物**：斷網可新增消費與瀏覽快取，恢復網路後自動同步，`flutter analyze` 零錯誤
 
 ---
 
@@ -321,9 +409,10 @@
 | 收據/照片附件 | P2 | M6 | ✅ |
 | 消費搜尋 & 篩選 | — | M6 | ✅ |
 | UX 優化（8 項） | — | M5 | ✅ |
-| UI 視覺翻新 (Apple 冷白系) | — | M7 | 🔲 待實作 |
-| 新增消費 Progressive Disclosure | — | M7 | 🔲 待實作 |
+| UI 視覺翻新 (Apple 冷白系) | — | M7 | ✅ |
+| 新增消費 Progressive Disclosure | — | M7 | ✅ |
 | 推播通知 | P2 | — | ❌ 未開始 |
 | i18n 多語系 | P2 | — | ❌ 未開始 |
 | 金流串接 | P2 | — | ❌ 未開始 |
-| 離線快取 & 同步 | — | — | ❌ 未開始 |
+| iOS Home Widget | — | M8 | ❌ 未開始 |
+| 離線記帳 & 自動同步 | — | M9 | ❌ 未開始 |
