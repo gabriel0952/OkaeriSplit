@@ -1,8 +1,7 @@
 abstract final class AppConstants {
-  // Supabase — replace with real values before deployment
-  static const String supabaseUrl = 'https://wwkkdbirxaxtdffnfqrf.supabase.co';
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3a2tkYmlyeGF4dGRmZm5mcXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NTg2MDAsImV4cCI6MjA4NjUzNDYwMH0.d91jgkYO0D_4nMww2RmR0sRxV4xXFI5vyewocEWImfg';
+  // Supabase — injected via --dart-define-from-file=dart_defines.json at build time
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
   static const String redirectUrl = 'com.raycat.okaerisplit://login-callback';
   static const String appName = 'OkaeriSplit';

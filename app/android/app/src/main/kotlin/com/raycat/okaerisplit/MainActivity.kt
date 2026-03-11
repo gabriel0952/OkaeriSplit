@@ -1,4 +1,4 @@
-package com.example.app
+package com.raycat.okaerisplit
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -235,6 +235,68 @@
 
 ---
 
+## Milestone 7: UI 視覺翻新 & 新增消費 UX 優化
+
+**目標**：整體視覺升級為 Apple 冷白系設計語言，新增消費改為漸進式揭露，將常用路徑縮短至 3 步
+
+### 7.1 Design System & Theme 更新
+
+- [ ] `app_theme.dart`：更新色彩系統（背景 #F5F5F7、卡片白色、主色 Indigo #4F46E5）
+- [ ] `app_theme.dart`：Typography 調整（letterSpacing 收緊、fontWeight 層次）
+- [ ] `app_theme.dart`：CardTheme（圓角 16px、無 elevation/shadow）
+- [ ] `app_theme.dart`：AppBar（elevation:0、scrolledUnderElevation:0、背景融合底色）
+- [ ] `app_theme.dart`：FilledButton（圓角 14px、高度 52px）
+- [ ] `app_theme.dart`：NavigationBar（白底、0.5px 頂線、輕量 indicator）
+- [ ] `app_theme.dart`：同步更新 Dark theme 對應設定
+
+### 7.2 Shell & 全域元件更新
+
+- [ ] `main_shell.dart`：NavigationBar 加上頂部細線分隔、更新 icon 至 rounded 系列
+- [ ] `balance_summary_card.dart`：使用語義色（正值 #16A34A、負值 #DC2626）、卡片樣式升級
+- [ ] `expense_card.dart`：視覺升級（圓角、分類色彩、排版改善）
+- [ ] `group_card.dart`：視覺升級
+
+### 7.3 新增消費畫面重構（Progressive Disclosure）
+
+詳細規格見 `SPEC.md §9`
+
+**[A] 金額區**
+- [ ] 移除原本的 `TextFormField`，改為 `GestureDetector` 包裹的 Display widget
+- [ ] 隱藏 `TextField` 用於接收輸入，`FocusNode` 管理 focus
+- [ ] 金額 Display：fontSize 48、fontWeight 700、letterSpacing -1.0
+- [ ] 輸入限制：`FilteringTextInputFormatter`，只允許數字與一個小數點、小數點後 ≤ 2 位
+- [ ] 幣別：小型 Chip，de-emphasize 樣式，點擊彈出幣別選擇器
+
+**[B1] 描述 + 分類卡**
+- [ ] 描述改為無 border 的 TextField（卡片內整行），分類在下方
+- [ ] 分類選擇器改為橫向可滑動 `ListView`（替換原 Wrap）
+- [ ] 分類 Item：60×64px 圓角 tile，icon 上 label 下，選中主色填底
+- [ ] 右側固定「+ 自訂」按鈕（不隨分類列表捲動）
+
+**[B2] 付款人卡**
+- [ ] 移除 `DropdownButton`，改為頭像 Chip 單選（顯示 CircleAvatar + 名字）
+- [ ] 選中狀態：主色邊框 + ✓ icon
+
+**[B3] 分攤卡**
+- [ ] 分攤成員：移除 `CheckboxListTile`，改為頭像 Chip 多選
+- [ ] 即時摘要文字（均分金額 / 非均分模式說明）
+- [ ] 分帳方式改為 `ExpansionTile`（預設折疊）
+- [ ] 折疊 header 顯示目前分帳方式摘要（含比例/金額細節）
+- [ ] 展開後：RadioListTile 四選一，選中非均分後 inline 展開對應輸入 UI
+
+**[B4] 更多選項**
+- [ ] `ExpansionTile` 包裹：日期、備註、附件
+- [ ] 日期移入此區（預設今天，不再佔用主表單空間）
+- [ ] 編輯模式且有備註或附件時，預設 `initiallyExpanded: true`
+
+**[C] 底部按鈕**
+- [ ] 固定在 `SafeArea` 底部（不隨表單捲動）
+- [ ] Disabled 條件：金額 ≤ 0 **或** 描述空白
+
+**交付物**：視覺全面升級、新增消費常用路徑縮短至 3 步、`flutter analyze` 零錯誤、既有測試全過
+
+---
+
 ## PRD 功能覆蓋對照
 
 | PRD 功能 | 優先級 | Milestone | 狀態 |
@@ -259,6 +321,8 @@
 | 收據/照片附件 | P2 | M6 | ✅ |
 | 消費搜尋 & 篩選 | — | M6 | ✅ |
 | UX 優化（8 項） | — | M5 | ✅ |
+| UI 視覺翻新 (Apple 冷白系) | — | M7 | 🔲 待實作 |
+| 新增消費 Progressive Disclosure | — | M7 | 🔲 待實作 |
 | 推播通知 | P2 | — | ❌ 未開始 |
 | i18n 多語系 | P2 | — | ❌ 未開始 |
 | 金流串接 | P2 | — | ❌ 未開始 |

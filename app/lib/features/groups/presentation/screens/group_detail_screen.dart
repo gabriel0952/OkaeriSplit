@@ -218,8 +218,10 @@ class GroupDetailScreen extends ConsumerWidget {
                               ?.map((m) => m.userId)
                               .toSet() ??
                           {};
-                      showDialog(
+                      showModalBottomSheet<bool>(
                         context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
                         builder: (_) => InviteMemberDialog(
                           groupId: groupId,
                           existingMemberIds: memberIds,

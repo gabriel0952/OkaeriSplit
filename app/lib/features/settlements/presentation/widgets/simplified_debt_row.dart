@@ -42,6 +42,11 @@ class SimplifiedDebtRow extends StatelessWidget {
       trailing: isFromCurrentUser
           ? FilledButton.tonal(
               onPressed: onPay,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(72, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
               child: const Text('付款'),
             )
           : null,

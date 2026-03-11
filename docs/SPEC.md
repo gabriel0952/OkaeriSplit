@@ -965,3 +965,141 @@ final groupRealtimeProvider = StreamProvider.family<void, String>(
 | 欠款總覽 | — (計算) | RPC: get_user_balances | settlements |
 | 手動標記已付款 | settlements | Client SDK | settlements |
 | 基本 Dashboard | — (計算) | RPC: get_overall_balances | dashboard |
+
+---
+
+## 8. UI Design System
+
+### 8.1 色彩規範
+
+| 用途 | Light | Dark |
+|------|-------|------|
+| Scaffold 背景 | `#F5F5F7` | `#1C1C1E` |
+| 卡片 / 容器 | `#FFFFFF` | `#2C2C2E` |
+| 主色 (Primary) | `#4F46E5` (Indigo) | `#4F46E5` |
+| 正值 (應收/盈餘) | `#16A34A` | `#22C55E` |
+| 負值 (應付/虧損) | `#DC2626` | `#EF4444` |
+| 次要文字 | `#6E6E73` | `#AEAEB2` |
+| 分隔線 | `rgba(0,0,0,4%)` | `rgba(255,255,255,8%)` |
+
+### 8.2 形狀規範
+
+| 元件 | border-radius |
+|------|---------------|
+| 卡片 / Section | 16px |
+| 輸入框 / 按鈕 | 12px |
+| Chips | 20px（全圓角）|
+| 頭像 | 50%（圓形）|
+
+### 8.3 陰影策略
+
+不使用 box-shadow。視覺層次完全依賴背景色差：
+- Scaffold 底色 `#F5F5F7` → 卡片 `#FFFFFF`（白色浮起感）
+- 深色模式 `#1C1C1E` → 卡片 `#2C2C2E`
+
+### 8.4 字體規範
+
+| 層級 | fontSize | fontWeight | letterSpacing |
+|------|----------|------------|---------------|
+| 金額大字 | 48 | 700 | -1.0 |
+| 大標題 | 34 | 700 | -1.0 |
+| 標題 | 22 | 700 | -0.5 |
+| Section 標 | 17 | 600 | -0.3 |
+| Body | 15 | 400 | -0.1 |
+| Caption | 13 | 400 | 0 |
+
+### 8.5 AppBar 規範
+
+- 背景透明，與 Scaffold 底色融合
+- `elevation: 0`，`scrolledUnderElevation: 0`（捲動時不加陰影）
+- 標題置中，fontSize 17 / fontWeight 600
+
+### 8.6 NavigationBar 規範
+
+- 背景色：`#FFFFFF` (Light) / `#2C2C2E` (Dark)
+- 頂部細線分隔：`0.5px`，顏色同分隔線規範
+- Indicator 色：主色 12% opacity（輕量）
+- Label fontSize 11
+
+---
+
+## 9. 新增消費畫面 UX 規格（Progressive Disclosure）
+
+### 9.1 整體佈局
+
+```
+Scaffold
+├── AppBar ("新增消費" / "編輯消費")
+├── Column (flex)
+│   ├── [A] 金額區（固定，不隨捲動）
+│   └── [B] 表單主體（Expanded → ListView）
+│       ├── [B1] 描述 + 分類卡
+│       ├── [B2] 付款人卡
+│       ├── [B3] 分攤卡（含折疊的分帳方式）
+│       └── [B4] 更多選項（ExpansionTile）
+└── [C] 底部送出按鈕（固定）
+```
+
+### 9.2 [A] 金額區
+
+- 整個區塊可點擊，點擊後 focus 到隱藏 TextField，彈出系統鍵盤
+- 鍵盤類型：`TextInputType.numberWithOptions(decimal: true)`
+- 輸入限制：只接受數字 `[0-9]` 與一個小數點，小數點後最多 2 位
+- 金額以 Display 樣式呈現（fontSize 48, fontWeight 700）
+- 未輸入時顯示灰色「0」placeholder
+- 左側：幣別 Chip（視覺 de-emphasize，fontSize 13，淺色邊框），點擊可換
+- 送出按鈕：金額為 0 或描述空白時 disabled
+
+### 9.3 [B1] 描述 + 分類卡
+
+- 描述 TextField（無 border，填滿卡片內一整行）
+- 細分隔線
+- 分類：橫向可滑動 `ListView.builder`（非 Wrap），不換行
+- 分類 Item 樣式：60×64px 圓角正方形 tile，icon 上 + label 下
+  - 未選中：白底 or 淺灰底、深色 icon
+  - 選中：主色填底、白色 icon + 白色文字
+- 最右側固定顯示「+ 自訂」按鈕（不捲動消失）
+
+### 9.4 [B2] 付款人卡
+
+- Section title「誰付的錢」
+- 橫向 Wrap，每個成員顯示為「頭像 + 姓名」Chip（單選）
+- 選中狀態：主色邊框 + ✓ badge
+- 未選中狀態：灰色邊框
+
+### 9.5 [B3] 分攤卡
+
+**成員選擇區**
+- Section title「分攤成員」
+- 橫向 Wrap，每個成員顯示為「頭像 + 姓名」Chip（多選，最少 1 人）
+- 選中狀態：主色填底、白字
+- 未選中：淺灰底
+
+**即時摘要文字**（在 chips 下方）
+- 均分：「平均分給 N 人，每人 $X.XX」
+- 自訂比例：「依比例分配 (A:B:C)」
+- 指定金額：驗證中或已符合/差額提示
+- 項目拆分：「共 N 個品項」
+
+**分帳方式 ExpansionTile**（預設折疊）
+- 折疊時 header 顯示：「分帳方式：[目前模式名稱]」
+  - 均分 → 不特別標示（或顯示「均分」）
+  - 非均分 → 顯示「自訂比例 (2:1:1)」/ 「指定金額」/ 「項目拆分」
+- 展開後：RadioListTile 選擇模式（均分 / 自訂比例 / 指定金額 / 項目拆分）
+- 選中非均分後，在 RadioListTile 下方 inline 展開對應的輸入 UI
+
+### 9.6 [B4] 更多選項（ExpansionTile）
+
+預設折疊；若為編輯模式且 `note != null || attachmentUrls.isNotEmpty` 則預設展開。
+
+展開後包含：
+- 📅 **日期**：顯示目前日期，點擊打開 `showDatePicker`
+- 📝 **備註**：多行 TextField（maxLines: 2），選填
+- 📎 **收據/照片**：Wrap 縮圖 + 新增按鈕（拍照 / 相簿）
+
+### 9.7 [C] 底部送出按鈕
+
+- `FilledButton`，固定在 `SafeArea` 內底部
+- 文字：「新增消費」/ 「儲存變更」
+- Disabled 條件：金額 ≤ 0 **或** 描述空白
+- Loading 狀態：顯示 `CircularProgressIndicator(strokeWidth: 2)`

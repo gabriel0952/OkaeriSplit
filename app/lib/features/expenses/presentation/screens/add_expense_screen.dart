@@ -11,6 +11,7 @@ import 'package:app/features/expenses/presentation/widgets/icon_picker_dialog.da
 import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -29,8 +30,9 @@ class AddExpenseScreen extends ConsumerStatefulWidget {
 }
 
 class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
-  final _formKey = GlobalKey<FormState>();
+  // Tasks 3.1: hidden TextField + focus node for amount
   final _amountController = TextEditingController();
+  final _amountFocusNode = FocusNode();
   final _descriptionController = TextEditingController();
   final _noteController = TextEditingController();
 
@@ -55,19 +57,18 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   // Itemized split
   final List<_ItemEntry> _itemEntries = [];
 
+  // Tasks 6.5 & 7.1: UI expansion state
+  bool _splitTypeExpanded = false;
+  bool _moreOptionsExpanded = false;
+
   static const _supportedCurrencies = [
-    'TWD',
-    'USD',
-    'JPY',
-    'EUR',
-    'GBP',
-    'KRW',
-    'CNY',
+    'TWD', 'USD', 'JPY', 'EUR', 'GBP', 'KRW', 'CNY',
   ];
 
   @override
   void dispose() {
     _amountController.dispose();
+    _amountFocusNode.dispose();
     _descriptionController.dispose();
     _noteController.dispose();
     for (final c in _ratioControllers.values) {
@@ -125,6 +126,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 _splitType = expense.splits.first.splitType;
               }
               _existingAttachmentUrls = List.of(expense.attachmentUrls);
+              // Task 7.2: auto-expand more options if data exists
+              _moreOptionsExpanded = (expense.note != null && expense.note!.isNotEmpty) ||
+                  expense.attachmentUrls.isNotEmpty;
               _isLoaded = true;
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => setState(() {}),
@@ -158,224 +162,420 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               groupAsync.valueOrNull?.currency ?? AppConstants.defaultCurrency;
           _selectedCurrency ??= groupCurrency;
 
-          return _buildForm(context, members, _selectedCurrency!);
+          return _buildLayout(context, members, _selectedCurrency!);
         },
       ),
     );
   }
 
-  Widget _buildForm(
+  // Task 8.3: Top-level Column layout — amount fixed top, ListView in middle, button fixed bottom
+  Widget _buildLayout(
     BuildContext context,
     List<GroupMemberEntity> members,
     String currency,
   ) {
-    final amount = double.tryParse(_amountController.text) ?? 0;
-    final customCategoriesAsync =
-        ref.watch(groupCategoriesProvider(widget.groupId));
+    final customCategoriesAsync = ref.watch(groupCategoriesProvider(widget.groupId));
     final customCategories = customCategoriesAsync.valueOrNull ?? [];
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final canSubmit = amount > 0 && _descriptionController.text.trim().isNotEmpty;
 
+    return Column(
+      children: [
+        // [A] Amount section — fixed at top
+        _buildAmountSection(context, currency),
+
+        // [B] Scrollable form body
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              const SizedBox(height: 16),
+
+              // [B1] Description + Category
+              _buildDescriptionCategoryCard(context, customCategories),
+              const SizedBox(height: 12),
+
+              // [B2] Paid by
+              _buildPaidByCard(context, members),
+              const SizedBox(height: 12),
+
+              // [B3] Split
+              _buildSplitCard(context, members, amount),
+              const SizedBox(height: 12),
+
+              // [B4] More options (date, note, attachments)
+              _buildMoreOptionsCard(context),
+            ],
+          ),
+        ),
+
+        // [C] Fixed bottom submit button
+        _buildSubmitButton(context, currency, canSubmit),
+      ],
+    );
+  }
+
+  // ─── [A] Amount Section ─────────────────────────────────────────────────
+
+  Widget _buildAmountSection(BuildContext context, String currency) {
     final colorScheme = Theme.of(context).colorScheme;
-    final inputBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: colorScheme.outlineVariant),
-    );
-    final focusedBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: colorScheme.primary, width: 2),
-    );
-    final inputTheme = InputDecoration(
-      border: inputBorder,
-      enabledBorder: inputBorder,
-      focusedBorder: focusedBorder,
-      filled: true,
-      fillColor: colorScheme.surfaceContainerLowest,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    );
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final hasAmount = _amountController.text.isNotEmpty && amount > 0;
 
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Amount + Currency row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: TextFormField(
-                  controller: _amountController,
-                  decoration: inputTheme.copyWith(
-                    labelText: '金額',
-                    prefixText: '\$ ',
+    return GestureDetector(
+      onTap: () => _amountFocusNode.requestFocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: colorScheme.surface,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Task 3.4: de-emphasised currency chip
+            GestureDetector(
+              onTap: () => _showCurrencyPicker(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: colorScheme.outlineVariant,
+                    width: 1,
                   ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return '請輸入金額';
-                    final amount = double.tryParse(value);
-                    if (amount == null || amount <= 0) return '請輸入有效金額';
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: InputDecorator(
-                  decoration: inputTheme.copyWith(
-                    labelText: '幣別',
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedCurrency,
-                      isExpanded: true,
-                      isDense: true,
-                      borderRadius: BorderRadius.circular(12),
-                      items: _supportedCurrencies
-                          .map(
-                            (c) => DropdownMenuItem(value: c, child: Text(c)),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _selectedCurrency = value);
-                        }
-                      },
-                    ),
+                child: Text(
+                  _selectedCurrency ?? currency,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Description
-          TextFormField(
-            controller: _descriptionController,
-            decoration: inputTheme.copyWith(
-              labelText: '描述',
-              prefixIcon: const Icon(Icons.edit_outlined),
             ),
-            validator: (value) =>
-                (value == null || value.isEmpty) ? '請輸入描述' : null,
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-          // Paid by + Date row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: InputDecorator(
-                  decoration: inputTheme.copyWith(
-                    labelText: '付款人',
-                    prefixIcon: const Icon(Icons.person_outlined),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _paidBy,
-                      isExpanded: true,
-                      isDense: true,
-                      borderRadius: BorderRadius.circular(12),
-                      items: members
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m.userId,
-                              child: Text(
-                                m.displayName,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) => setState(() => _paidBy = value),
-                    ),
-                  ),
-                ),
+            // Task 3.2: Large amount display
+            Text(
+              hasAmount
+                  ? _formatAmountDisplay(_amountController.text)
+                  : '0',
+              style: TextStyle(
+                fontSize: 48,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -1.0,
+                color: hasAmount
+                    ? colorScheme.onSurface
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _expenseDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now().add(const Duration(days: 1)),
-                    );
-                    if (picked != null) setState(() => _expenseDate = picked);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: inputTheme.copyWith(
-                      labelText: '日期',
-                      prefixIcon: const Icon(Icons.calendar_today_outlined),
-                    ),
-                    child: Text(
-                      DateFormat('yyyy/MM/dd').format(_expenseDate),
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
+            ),
 
-          // Category
-          _buildSectionLabel('分類'),
-          const SizedBox(height: 8),
+            // Task 3.1: Hidden TextField for actual input
+            SizedBox(
+              height: 0,
+              child: TextField(
+                controller: _amountController,
+                focusNode: _amountFocusNode,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                // Task 3.3: FilteringTextInputFormatter — digits + one decimal point, max 2 decimal places
+                inputFormatters: [
+                  _AmountInputFormatter(),
+                ],
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(fontSize: 1, color: Colors.transparent),
+                decoration: const InputDecoration(border: InputBorder.none),
+              ),
+            ),
+
+            // Thin divider line like a calculator screen
+            Divider(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              height: 1,
+              thickness: 0.5,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatAmountDisplay(String raw) {
+    if (raw.isEmpty) return '0';
+    // Keep user's raw input formatting (they may still be typing "1.")
+    return raw;
+  }
+
+  void _showCurrencyPicker(BuildContext context) {
+    showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _supportedCurrencies.map((c) => ListTile(
+            title: Text(c),
+            trailing: _selectedCurrency == c
+                ? Icon(Icons.check_rounded,
+                    color: Theme.of(context).colorScheme.primary)
+                : null,
+            onTap: () {
+              setState(() => _selectedCurrency = c);
+              Navigator.pop(context);
+            },
+          )).toList(),
+        ),
+      ),
+    );
+  }
+
+  // ─── [B1] Description + Category Card ───────────────────────────────────
+
+  Widget _buildDescriptionCategoryCard(
+    BuildContext context,
+    List<dynamic> customCategories,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Description — borderless, fills full width
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              controller: _descriptionController,
+              decoration: InputDecoration(
+                hintText: '描述這筆消費…',
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+
+          Divider(
+            height: 1,
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+
+          // Tasks 4.2–4.4: Horizontal tile category picker
+          const SizedBox(height: 10),
           CategoryPicker(
             selected: _category,
             onSelected: (c) => setState(() => _category = c),
-            customCategories: customCategories,
+            customCategories: customCategories
+                .cast(),
             onAddCategory: () => _showAddCategoryDialog(context),
             onDeleteCategory: (id) => _deleteCategory(id),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
 
-          // Note
-          TextFormField(
-            controller: _noteController,
-            decoration: inputTheme.copyWith(
-              labelText: '備註（選填）',
-              prefixIcon: const Icon(Icons.notes_outlined),
+  // ─── [B2] Paid By Card ───────────────────────────────────────────────────
+
+  // Tasks 5.1–5.3: Avatar chip single-select for payer
+  Widget _buildPaidByCard(BuildContext context, List<GroupMemberEntity> members) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionLabel(context, '誰付的錢'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: members.map((m) {
+                final isSelected = _paidBy == m.userId;
+                return _MemberChip(
+                  name: m.displayName,
+                  isSelected: isSelected,
+                  selectionMode: _ChipSelectionMode.single,
+                  onTap: () => setState(() => _paidBy = m.userId),
+                );
+              }).toList(),
             ),
-            maxLines: 2,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── [B3] Split Card ─────────────────────────────────────────────────────
+
+  Widget _buildSplitCard(
+    BuildContext context,
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Task 6.1: Member chips multi-select
+            _sectionLabel(context, '分攤成員'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: members.map((m) {
+                final isSelected = _selectedMemberIds.contains(m.userId);
+                return _MemberChip(
+                  name: m.displayName,
+                  isSelected: isSelected,
+                  selectionMode: _ChipSelectionMode.multi,
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        // Task 6.3: min 1 person
+                        if (_selectedMemberIds.length > 1) {
+                          _selectedMemberIds.remove(m.userId);
+                        }
+                      } else {
+                        _selectedMemberIds.add(m.userId);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+
+            // Task 6.4: Inline split summary
+            const SizedBox(height: 12),
+            _buildSplitSummaryText(context, amount),
+
+            const SizedBox(height: 8),
+
+            // Tasks 6.5–6.8: ExpansionTile for split type
+            _buildSplitTypeExpansion(context, members, amount),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Task 6.4: Real-time split summary
+  Widget _buildSplitSummaryText(BuildContext context, double amount) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final count = _selectedMemberIds.length;
+    String summary;
+
+    switch (_splitType) {
+      case SplitType.equal:
+        if (amount > 0 && count > 0) {
+          final perPerson = SplitCalculator.calculateEqualSplits(amount, count);
+          final perPersonAmt = perPerson.isNotEmpty ? perPerson.first : 0.0;
+          summary = '平均分給 $count 人，每人 \$${perPersonAmt.toStringAsFixed(2)}';
+        } else {
+          summary = '平均分給 $count 人';
+        }
+      case SplitType.customRatio:
+        final ratioStr = _selectedMemberIds.map((id) {
+          return _ratioControllers[id]?.text ?? '1';
+        }).join(':');
+        summary = '依自訂比例分配 ($ratioStr)';
+      case SplitType.fixedAmount:
+        summary = '指定各人金額';
+      case SplitType.itemized:
+        summary = '項目拆分（共 ${_itemEntries.length} 個品項）';
+    }
+
+    return Text(
+      summary,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: colorScheme.primary,
+            fontWeight: FontWeight.w500,
           ),
-          const SizedBox(height: 20),
+    );
+  }
 
-          // Attachments
-          _buildSectionLabel('收據/照片'),
-          const SizedBox(height: 8),
-          _buildAttachmentSection(context),
-          const SizedBox(height: 20),
+  // Task 6.6: Header subtitle shows current split mode summary
+  String _splitTypeHeaderSubtitle() {
+    switch (_splitType) {
+      case SplitType.equal:
+        return '均分';
+      case SplitType.customRatio:
+        final ratioStr = _selectedMemberIds.map((id) {
+          return _ratioControllers[id]?.text ?? '1';
+        }).join(':');
+        return '自訂比例 ($ratioStr)';
+      case SplitType.fixedAmount:
+        return '指定金額';
+      case SplitType.itemized:
+        return '項目拆分';
+    }
+  }
 
-          const Divider(),
-          const SizedBox(height: 12),
+  // Tasks 6.5–6.8: Split type expansion tile
+  Widget _buildSplitTypeExpansion(
+    BuildContext context,
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
 
-          // Split type selector
-          _buildSectionLabel('分帳方式'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: SplitType.values.map((type) {
-              final selected = _splitType == type;
-              return ChoiceChip(
-                label: Text(type.label),
-                selected: selected,
-                onSelected: (_) => setState(() => _splitType = type),
-              );
-            }).toList(),
+    return Theme(
+      // Remove ExpansionTile's default divider
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        initiallyExpanded: _splitTypeExpanded,
+        onExpansionChanged: (v) => setState(() => _splitTypeExpanded = v),
+        title: Text(
+          '分帳方式',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+        ),
+        subtitle: Text(
+          _splitTypeHeaderSubtitle(),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+        ),
+        children: [
+          // Task 6.7: RadioGroup four options (Flutter 3.32+ API)
+          RadioGroup<SplitType>(
+            groupValue: _splitType,
+            onChanged: (v) {
+              if (v != null) setState(() => _splitType = v);
+            },
+            child: Column(
+              children: SplitType.values.map((type) {
+                return RadioListTile<SplitType>(
+                  value: type,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(type.label),
+                  dense: true,
+                );
+              }).toList(),
+            ),
           ),
-          const SizedBox(height: 16),
 
-          // Itemized split mode
+          // Task 6.8: Inline inputs for non-equal split types
+          if (_splitType == SplitType.customRatio) ...[
+            const SizedBox(height: 8),
+            ..._buildRatioInputs(context, members, amount),
+          ],
+          if (_splitType == SplitType.fixedAmount) ...[
+            const SizedBox(height: 8),
+            ..._buildFixedAmountInputs(context, members, amount),
+          ],
           if (_splitType == SplitType.itemized) ...[
-            _buildSectionLabel('品項'),
             const SizedBox(height: 8),
             ..._buildItemizedList(members),
             const SizedBox(height: 8),
@@ -389,56 +589,521 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   ));
                 });
               },
-              icon: const Icon(Icons.add, size: 18),
+              icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('新增品項'),
             ),
             if (amount > 0) _buildItemizedHint(amount),
-          ],
-
-          // Non-itemized split
-          if (_splitType != SplitType.itemized) ...[
-            // Split members
-            _buildSectionLabel('分帳成員'),
             const SizedBox(height: 8),
-            ..._buildMemberSplitList(members, amount),
-
-            // Fixed amount validation hint
-            if (_splitType == SplitType.fixedAmount && amount > 0)
-              _buildFixedAmountHint(amount),
           ],
-
-          const SizedBox(height: 24),
-
-          // Submit
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _isSubmitting ? null : () => _handleSubmit(currency),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      widget.isEditing ? '儲存變更' : '新增消費',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-            ),
-          ),
         ],
       ),
     );
   }
+
+  // ─── [B4] More Options Card ──────────────────────────────────────────────
+
+  Widget _buildMoreOptionsCard(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: _moreOptionsExpanded,
+          onExpansionChanged: (v) => setState(() => _moreOptionsExpanded = v),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Text(
+                '更多選項',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ],
+          ),
+          children: [
+            // Task 7.3: Date moved here
+            _buildDateTile(context),
+
+            Divider(
+              height: 1,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+
+            // Task 7.4: Note moved here
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              decoration: InputDecoration(
+                hintText: '備註（選填）',
+                prefixIcon: const Icon(Icons.notes_outlined, size: 20),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              maxLines: 2,
+            ),
+
+            Divider(
+              height: 1,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+
+            // Task 7.5: Attachments moved here
+            const SizedBox(height: 12),
+            _buildAttachmentSection(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Task 7.3: Date tile
+  Widget _buildDateTile(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _expenseDate,
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now().add(const Duration(days: 1)),
+        );
+        if (picked != null) setState(() => _expenseDate = picked);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 20, color: colorScheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Text(
+              '日期',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const Spacer(),
+            Text(
+              DateFormat('yyyy/MM/dd').format(_expenseDate),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── [C] Fixed Submit Button ─────────────────────────────────────────────
+
+  // Task 8.1–8.2: Fixed bottom FilledButton
+  Widget _buildSubmitButton(BuildContext context, String currency, bool canSubmit) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FilledButton(
+          onPressed: (canSubmit && !_isSubmitting)
+              ? () => _handleSubmit(currency)
+              : null,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  widget.isEditing ? '儲存變更' : '新增消費',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Helper Widgets ──────────────────────────────────────────────────────
+
+  Widget _sectionLabel(BuildContext context, String label) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+
+  // ─── Split Input Helpers (logic unchanged) ───────────────────────────────
+
+  List<Widget> _buildRatioInputs(
+    BuildContext context,
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    final ratios = <String, int>{};
+    for (final id in _selectedMemberIds) {
+      ratios[id] = int.tryParse(_ratioControllers[id]?.text ?? '1') ?? 1;
+    }
+    final ratioSplits = amount > 0
+        ? SplitCalculator.calculateRatioSplits(amount, ratios)
+        : <String, double>{};
+
+    return members.map((member) {
+      final isSelected = _selectedMemberIds.contains(member.userId);
+      if (!isSelected) return const SizedBox.shrink();
+      final splitAmount = ratioSplits[member.userId] ?? 0.0;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(child: Text(member.displayName)),
+            SizedBox(
+              width: 64,
+              child: TextField(
+                controller: _ratioControllers[member.userId],
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 80,
+              child: Text(
+                amount > 0 ? '\$${splitAmount.toStringAsFixed(2)}' : '',
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  List<Widget> _buildFixedAmountInputs(
+    BuildContext context,
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    return [
+      ...members.map((member) {
+        final isSelected = _selectedMemberIds.contains(member.userId);
+        if (!isSelected) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Expanded(child: Text(member.displayName)),
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: _fixedAmountControllers[member.userId],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    prefixText: '\$ ',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+      if (amount > 0) _buildFixedAmountHint(amount),
+    ];
+  }
+
+  Widget _buildFixedAmountHint(double amount) {
+    final amounts = _getFixedAmountsMap();
+    final diff = SplitCalculator.fixedAmountDifference(amount, amounts);
+
+    if (diff.abs() < 0.01) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          '金額分配正確',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontSize: 13,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        diff > 0
+            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
+            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Map<String, double> _getFixedAmountsMap() {
+    final amounts = <String, double>{};
+    for (final id in _selectedMemberIds) {
+      amounts[id] = double.tryParse(_fixedAmountControllers[id]?.text ?? '') ?? 0;
+    }
+    return amounts;
+  }
+
+  List<Widget> _buildItemizedList(List<GroupMemberEntity> members) {
+    return _itemEntries.asMap().entries.map((entry) {
+      final idx = entry.key;
+      final item = entry.value;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: item.nameController,
+                      decoration: const InputDecoration(
+                        labelText: '品項名稱',
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: item.amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: '金額',
+                        prefixText: '\$ ',
+                        isDense: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _itemEntries[idx].nameController.dispose();
+                        _itemEntries[idx].amountController.dispose();
+                        _itemEntries.removeAt(idx);
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '分攤者',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: members.map((m) {
+                  final selected = item.sharedByUserIds.contains(m.userId);
+                  return FilterChip(
+                    label: Text(m.displayName, style: const TextStyle(fontSize: 12)),
+                    selected: selected,
+                    onSelected: (val) {
+                      setState(() {
+                        if (val) {
+                          item.sharedByUserIds.add(m.userId);
+                        } else if (item.sharedByUserIds.length > 1) {
+                          item.sharedByUserIds.remove(m.userId);
+                        }
+                      });
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildItemizedHint(double totalAmount) {
+    double itemsTotal = 0;
+    for (final item in _itemEntries) {
+      itemsTotal += double.tryParse(item.amountController.text) ?? 0;
+    }
+    final diff = totalAmount - itemsTotal;
+
+    if (diff.abs() < 0.01) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          '品項金額合計正確',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontSize: 13,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        diff > 0
+            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
+            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  // ─── Attachment Section ──────────────────────────────────────────────────
+
+  Widget _buildAttachmentSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.attach_file_rounded,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '收據 / 照片',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ..._existingAttachmentUrls.map((url) => _AttachmentThumbnail(
+                  imageProvider: NetworkImage(url),
+                  onRemove: () {
+                    setState(() {
+                      _existingAttachmentUrls.remove(url);
+                      _removedAttachmentUrls.add(url);
+                    });
+                  },
+                )),
+            ..._newAttachments.map((file) => _AttachmentThumbnail(
+                  imageProvider: FileImage(file),
+                  onRemove: () => setState(() => _newAttachments.remove(file)),
+                )),
+            InkWell(
+              onTap: _pickAttachment,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.add_a_photo_outlined,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickAttachment() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('拍照'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('從相簿選取'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      setState(() => _newAttachments.add(File(picked.path)));
+    }
+  }
+
+  // ─── Category Dialogs ────────────────────────────────────────────────────
 
   Future<void> _showAddCategoryDialog(BuildContext context) async {
     final nameController = TextEditingController();
@@ -456,7 +1121,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 controller: nameController,
                 decoration: const InputDecoration(
                   labelText: '分類名稱',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -521,7 +1185,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final ds = ref.read(supabaseExpenseDataSourceProvider);
     await ds.deleteGroupCategory(categoryId);
     ref.invalidate(groupCategoriesProvider(widget.groupId));
-    // If the deleted category was selected, reset to default
     final customCategories =
         ref.read(groupCategoriesProvider(widget.groupId)).valueOrNull ?? [];
     final stillExists = customCategories.any((c) => c.name == _category);
@@ -530,222 +1193,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
-  Widget _buildSectionLabel(String label) {
-    return Text(
-      label,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-    );
-  }
-
-  List<Widget> _buildMemberSplitList(
-    List<GroupMemberEntity> members,
-    double amount,
-  ) {
-    switch (_splitType) {
-      case SplitType.equal:
-        return _buildEqualSplitList(members, amount);
-      case SplitType.customRatio:
-        return _buildRatioSplitList(members, amount);
-      case SplitType.fixedAmount:
-        return _buildFixedAmountSplitList(members, amount);
-      case SplitType.itemized:
-        return []; // Handled separately by _buildItemizedList
-    }
-  }
-
-  List<Widget> _buildEqualSplitList(
-    List<GroupMemberEntity> members,
-    double amount,
-  ) {
-    final splitAmounts = SplitCalculator.calculateEqualSplits(
-      amount,
-      _selectedMemberIds.length,
-    );
-
-    return members.map((member) {
-      final isSelected = _selectedMemberIds.contains(member.userId);
-      final index = _selectedMemberIds.toList().indexOf(member.userId);
-      final splitAmount = isSelected && splitAmounts.isNotEmpty && index >= 0
-          ? splitAmounts[index]
-          : 0.0;
-
-      return CheckboxListTile(
-        value: isSelected,
-        onChanged: (checked) {
-          setState(() {
-            if (checked == true) {
-              _selectedMemberIds.add(member.userId);
-            } else if (_selectedMemberIds.length > 1) {
-              _selectedMemberIds.remove(member.userId);
-            }
-          });
-        },
-        title: Text(member.displayName),
-        subtitle:
-            isSelected && amount > 0
-                ? Text('\$${splitAmount.toStringAsFixed(2)}')
-                : null,
-        controlAffinity: ListTileControlAffinity.leading,
-        dense: true,
-      );
-    }).toList();
-  }
-
-  List<Widget> _buildRatioSplitList(
-    List<GroupMemberEntity> members,
-    double amount,
-  ) {
-    // Build ratios map from controllers
-    final ratios = <String, int>{};
-    for (final id in _selectedMemberIds) {
-      final text = _ratioControllers[id]?.text ?? '1';
-      ratios[id] = int.tryParse(text) ?? 1;
-    }
-
-    final ratioSplits =
-        amount > 0
-            ? SplitCalculator.calculateRatioSplits(amount, ratios)
-            : <String, double>{};
-
-    return members.map((member) {
-      final isSelected = _selectedMemberIds.contains(member.userId);
-      final splitAmount = ratioSplits[member.userId] ?? 0.0;
-
-      return CheckboxListTile(
-        value: isSelected,
-        onChanged: (checked) {
-          setState(() {
-            if (checked == true) {
-              _selectedMemberIds.add(member.userId);
-            } else if (_selectedMemberIds.length > 1) {
-              _selectedMemberIds.remove(member.userId);
-            }
-          });
-        },
-        title: Row(
-          children: [
-            Expanded(child: Text(member.displayName)),
-            if (isSelected)
-              SizedBox(
-                width: 64,
-                child: TextField(
-                  controller: _ratioControllers[member.userId],
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-          ],
-        ),
-        subtitle:
-            isSelected && amount > 0
-                ? Text('\$${splitAmount.toStringAsFixed(2)}')
-                : null,
-        controlAffinity: ListTileControlAffinity.leading,
-        dense: true,
-      );
-    }).toList();
-  }
-
-  List<Widget> _buildFixedAmountSplitList(
-    List<GroupMemberEntity> members,
-    double amount,
-  ) {
-    return members.map((member) {
-      final isSelected = _selectedMemberIds.contains(member.userId);
-
-      return CheckboxListTile(
-        value: isSelected,
-        onChanged: (checked) {
-          setState(() {
-            if (checked == true) {
-              _selectedMemberIds.add(member.userId);
-            } else if (_selectedMemberIds.length > 1) {
-              _selectedMemberIds.remove(member.userId);
-            }
-          });
-        },
-        title: Row(
-          children: [
-            Expanded(child: Text(member.displayName)),
-            if (isSelected)
-              SizedBox(
-                width: 100,
-                child: TextField(
-                  controller: _fixedAmountControllers[member.userId],
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                    prefixText: '\$ ',
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-          ],
-        ),
-        controlAffinity: ListTileControlAffinity.leading,
-        dense: true,
-      );
-    }).toList();
-  }
-
-  Widget _buildFixedAmountHint(double amount) {
-    final amounts = _getFixedAmountsMap();
-    final diff = SplitCalculator.fixedAmountDifference(amount, amounts);
-
-    if (diff.abs() < 0.01) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(
-          '金額分配正確',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontSize: 13,
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        diff > 0
-            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
-            : '超出 \$${diff.abs().toStringAsFixed(2)}',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.error,
-          fontSize: 13,
-        ),
-      ),
-    );
-  }
-
-  Map<String, double> _getFixedAmountsMap() {
-    final amounts = <String, double>{};
-    for (final id in _selectedMemberIds) {
-      final text = _fixedAmountControllers[id]?.text ?? '';
-      amounts[id] = double.tryParse(text) ?? 0;
-    }
-    return amounts;
-  }
+  // ─── Submit Logic (unchanged) ────────────────────────────────────────────
 
   List<Map<String, dynamic>> _buildSplitsPayload(double amount) {
     if (_splitType == SplitType.itemized) {
@@ -774,30 +1222,23 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         for (final id in memberIds) {
           ratios[id] = int.tryParse(_ratioControllers[id]?.text ?? '1') ?? 1;
         }
-        final ratioSplits = SplitCalculator.calculateRatioSplits(
-          amount,
-          ratios,
-        );
+        final ratioSplits = SplitCalculator.calculateRatioSplits(amount, ratios);
         return memberIds
-            .map(
-              (id) => {
-                'user_id': id,
-                'amount': ratioSplits[id] ?? 0.0,
-                'split_type': 'custom_ratio',
-              },
-            )
+            .map((id) => {
+                  'user_id': id,
+                  'amount': ratioSplits[id] ?? 0.0,
+                  'split_type': 'custom_ratio',
+                })
             .toList();
 
       case SplitType.fixedAmount:
         final amounts = _getFixedAmountsMap();
         return memberIds
-            .map(
-              (id) => {
-                'user_id': id,
-                'amount': amounts[id] ?? 0.0,
-                'split_type': 'fixed_amount',
-              },
-            )
+            .map((id) => {
+                  'user_id': id,
+                  'amount': amounts[id] ?? 0.0,
+                  'split_type': 'fixed_amount',
+                })
             .toList();
 
       case SplitType.itemized:
@@ -805,7 +1246,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
-  /// Aggregate per-user amounts from itemized entries.
   List<Map<String, dynamic>> _buildItemizedSplitsPayload() {
     final perUser = <String, double>{};
     for (final item in _itemEntries) {
@@ -826,225 +1266,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         .toList();
   }
 
-  List<Widget> _buildItemizedList(List<GroupMemberEntity> members) {
-    return _itemEntries.asMap().entries.map((entry) {
-      final idx = entry.key;
-      final item = entry.value;
-
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: item.nameController,
-                      decoration: const InputDecoration(
-                        labelText: '品項名稱',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: item.amountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: '金額',
-                        prefixText: '\$ ',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                    onPressed: () {
-                      setState(() {
-                        _itemEntries[idx].nameController.dispose();
-                        _itemEntries[idx].amountController.dispose();
-                        _itemEntries.removeAt(idx);
-                      });
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '分攤者',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-              Wrap(
-                spacing: 4,
-                children: members.map((m) {
-                  final selected = item.sharedByUserIds.contains(m.userId);
-                  return FilterChip(
-                    label: Text(
-                      m.displayName,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    selected: selected,
-                    onSelected: (val) {
-                      setState(() {
-                        if (val) {
-                          item.sharedByUserIds.add(m.userId);
-                        } else if (item.sharedByUserIds.length > 1) {
-                          item.sharedByUserIds.remove(m.userId);
-                        }
-                      });
-                    },
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-      );
-    }).toList();
-  }
-
-  Widget _buildItemizedHint(double totalAmount) {
-    double itemsTotal = 0;
-    for (final item in _itemEntries) {
-      itemsTotal += double.tryParse(item.amountController.text) ?? 0;
-    }
-    final diff = totalAmount - itemsTotal;
-
-    if (diff.abs() < 0.01) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(
-          '品項金額合計正確',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontSize: 13,
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        diff > 0
-            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
-            : '超出 \$${diff.abs().toStringAsFixed(2)}',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.error,
-          fontSize: 13,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttachmentSection(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // Existing attachments (from server)
-        ..._existingAttachmentUrls.map((url) => _AttachmentThumbnail(
-              imageProvider: NetworkImage(url),
-              onRemove: () {
-                setState(() {
-                  _existingAttachmentUrls.remove(url);
-                  _removedAttachmentUrls.add(url);
-                });
-              },
-            )),
-        // New local attachments
-        ..._newAttachments.map((file) => _AttachmentThumbnail(
-              imageProvider: FileImage(file),
-              onRemove: () => setState(() => _newAttachments.remove(file)),
-            )),
-        // Add button
-        InkWell(
-          onTap: _pickAttachment,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.add_a_photo_outlined,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _pickAttachment() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('拍照'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('從相簿選取'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-
-    final picked = await _imagePicker.pickImage(
-      source: source,
-      maxWidth: 1920,
-      maxHeight: 1920,
-      imageQuality: 80,
-    );
-    if (picked != null) {
-      setState(() => _newAttachments.add(File(picked.path)));
-    }
-  }
-
-  /// Upload new attachments and remove deleted ones. Returns final URL list.
   Future<List<String>> _processAttachments(String expenseId) async {
     final ds = ref.read(supabaseExpenseDataSourceProvider);
 
-    // Remove deleted attachments from storage
     for (final url in _removedAttachmentUrls) {
       try {
         await ds.removeAttachment(url);
-      } catch (_) {
-        // Ignore storage removal errors
-      }
+      } catch (_) {}
     }
 
-    // Upload new attachments
     final newUrls = <String>[];
     for (final file in _newAttachments) {
       final url = await ds.uploadAttachment(
@@ -1058,12 +1288,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   }
 
   Future<void> _handleSubmit(String currency) async {
-    if (!_formKey.currentState!.validate()) return;
     if (_splitType != SplitType.itemized && _selectedMemberIds.isEmpty) return;
 
     final amount = double.parse(_amountController.text);
+    final description = _descriptionController.text.trim();
+    if (amount <= 0 || description.isEmpty) return;
 
-    // Validate fixed amounts
     if (_splitType == SplitType.fixedAmount) {
       final amounts = _getFixedAmountsMap();
       if (!SplitCalculator.validateFixedAmounts(amount, amounts)) {
@@ -1074,7 +1304,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       }
     }
 
-    // Validate itemized
     if (_splitType == SplitType.itemized) {
       if (_itemEntries.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1096,8 +1325,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
     setState(() => _isSubmitting = true);
 
-    final hasAttachmentChanges = _newAttachments.isNotEmpty ||
-        _removedAttachmentUrls.isNotEmpty;
+    final hasAttachmentChanges =
+        _newAttachments.isNotEmpty || _removedAttachmentUrls.isNotEmpty;
 
     if (widget.isEditing) {
       final splits = _buildSplitsPayload(amount);
@@ -1106,7 +1335,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         expenseId: widget.expenseId!,
         amount: amount,
         category: _category,
-        description: _descriptionController.text.trim(),
+        description: description,
         note: _noteController.text.trim().isEmpty
             ? null
             : _noteController.text.trim(),
@@ -1119,12 +1348,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       await result.fold(
         (failure) async {
           setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(failure.message)));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(failure.message)));
         },
         (_) async {
-          // Process attachments after successful update
           if (hasAttachmentChanges) {
             try {
               final urls = await _processAttachments(widget.expenseId!);
@@ -1149,7 +1376,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
     } else {
       final splits = _buildSplitsPayload(amount);
-
       final createExpense = ref.read(createExpenseUseCaseProvider);
       final result = await createExpense(
         groupId: widget.groupId,
@@ -1157,7 +1383,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         amount: amount,
         currency: currency,
         category: _category,
-        description: _descriptionController.text.trim(),
+        description: description,
         note: _noteController.text.trim().isEmpty
             ? null
             : _noteController.text.trim(),
@@ -1170,12 +1396,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       await result.fold(
         (failure) async {
           setState(() => _isSubmitting = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(failure.message)));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(failure.message)));
         },
         (expenseId) async {
-          // Process attachments after successful creation
           if (hasAttachmentChanges) {
             try {
               final urls = await _processAttachments(expenseId);
@@ -1200,6 +1424,123 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 }
+
+// ─── Amount Input Formatter ──────────────────────────────────────────────────
+
+// Task 3.3: Only digits + one decimal point, max 2 decimal places
+class _AmountInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+
+    // Only digits and one dot
+    final filtered = text.replaceAll(RegExp(r'[^0-9.]'), '');
+
+    // Only one decimal point
+    final dotIndex = filtered.indexOf('.');
+    final cleaned = dotIndex == -1
+        ? filtered
+        : filtered.substring(0, dotIndex + 1) +
+            filtered.substring(dotIndex + 1).replaceAll('.', '');
+
+    // Max 2 decimal places
+    final dotPos = cleaned.indexOf('.');
+    final result = dotPos == -1
+        ? cleaned
+        : cleaned.length - dotPos - 1 > 2
+            ? cleaned.substring(0, dotPos + 3)
+            : cleaned;
+
+    return TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(offset: result.length),
+    );
+  }
+}
+
+// ─── Member Chip Widget ──────────────────────────────────────────────────────
+
+enum _ChipSelectionMode { single, multi }
+
+// Tasks 5.1–5.3 / 6.1–6.3: Reusable avatar chip for payer & split members
+class _MemberChip extends StatelessWidget {
+  const _MemberChip({
+    required this.name,
+    required this.isSelected,
+    required this.selectionMode,
+    required this.onTap,
+  });
+
+  final String name;
+  final bool isSelected;
+  final _ChipSelectionMode selectionMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSingle = selectionMode == _ChipSelectionMode.single;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isSingle ? colorScheme.surface : colorScheme.primary)
+              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(20),
+          border: isSelected && isSingle
+              ? Border.all(color: colorScheme.primary, width: 2)
+              : Border.all(color: Colors.transparent, width: 2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: isSelected
+                  ? (isSingle ? colorScheme.primary : Colors.white.withValues(alpha: 0.3))
+                  : colorScheme.primaryContainer,
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? Colors.white
+                      : colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              name,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isSelected
+                    ? (isSingle ? colorScheme.primary : Colors.white)
+                    : colorScheme.onSurface,
+              ),
+            ),
+            if (isSelected && isSingle) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.check_rounded, size: 14, color: colorScheme.primary),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Data Classes (unchanged) ────────────────────────────────────────────────
 
 class _ItemEntry {
   _ItemEntry({
@@ -1230,12 +1571,12 @@ class _AttachmentThumbnail extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Image(
             image: imageProvider,
-            width: 80,
-            height: 80,
+            width: 72,
+            height: 72,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => Container(
-              width: 80,
-              height: 80,
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
@@ -1256,8 +1597,8 @@ class _AttachmentThumbnail extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.close,
-                size: 14,
+                Icons.close_rounded,
+                size: 12,
                 color: Theme.of(context).colorScheme.onError,
               ),
             ),

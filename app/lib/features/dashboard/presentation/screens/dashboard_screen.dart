@@ -45,6 +45,7 @@ class DashboardScreen extends ConsumerWidget {
                 }
 
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     BalanceSummaryCard(balances: balances),

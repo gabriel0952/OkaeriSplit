@@ -1,6 +1,12 @@
 import 'package:app/features/settlements/domain/entities/settlement_entity.dart';
 import 'package:flutter/material.dart';
 
+// Task 2.2: Semantic colors from design system
+const _positiveColor = Color(0xFF16A34A);
+const _positiveColorDark = Color(0xFF22C55E);
+const _negativeColor = Color(0xFFDC2626);
+const _negativeColorDark = Color(0xFFEF4444);
+
 class BalanceSummaryCard extends StatelessWidget {
   const BalanceSummaryCard({super.key, required this.balances});
 
@@ -20,50 +26,60 @@ class BalanceSummaryCard extends StatelessWidget {
     }
 
     final net = totalReceivable - totalPayable;
-
     final currencies = balances.map((b) => b.currency).toSet();
     final currencyLabel = currencies.length == 1 ? currencies.first : '\$';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final positiveColor = isDark ? _positiveColorDark : _positiveColor;
+    final negativeColor = isDark ? _negativeColorDark : _negativeColor;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               '個人帳務總覽',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _SummaryColumn(
-                    label: '應收',
-                    amount: totalReceivable,
-                    color: Colors.green,
-                    currency: currencyLabel,
+            const SizedBox(height: 20),
+            IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SummaryColumn(
+                      label: '應收',
+                      amount: totalReceivable,
+                      color: positiveColor,
+                      currency: currencyLabel,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _SummaryColumn(
-                    label: '應付',
-                    amount: totalPayable,
-                    color: Colors.red,
-                    currency: currencyLabel,
+                  VerticalDivider(
+                    color: Theme.of(context).dividerColor,
+                    width: 1,
                   ),
-                ),
-                Expanded(
-                  child: _SummaryColumn(
-                    label: '淨額',
-                    amount: net,
-                    color: net >= 0 ? Colors.green : Colors.red,
-                    currency: currencyLabel,
+                  Expanded(
+                    child: _SummaryColumn(
+                      label: '應付',
+                      amount: totalPayable,
+                      color: negativeColor,
+                      currency: currencyLabel,
+                    ),
                   ),
-                ),
-              ],
+                  VerticalDivider(
+                    color: Theme.of(context).dividerColor,
+                    width: 1,
+                  ),
+                  Expanded(
+                    child: _SummaryColumn(
+                      label: '淨額',
+                      amount: net,
+                      color: net >= 0 ? positiveColor : negativeColor,
+                      currency: currencyLabel,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -95,12 +111,12 @@ class _SummaryColumn extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           '$currency ${amount.toStringAsFixed(0)}',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: color,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
               ),
         ),
       ],

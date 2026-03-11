@@ -70,8 +70,10 @@ class GroupListScreen extends ConsumerWidget {
           FloatingActionButton(
             heroTag: 'join',
             onPressed: () {
-              showDialog(
+              showModalBottomSheet<void>(
                 context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
                 builder: (_) => const JoinGroupDialog(),
               );
             },

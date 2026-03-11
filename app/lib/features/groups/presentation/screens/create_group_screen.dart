@@ -57,83 +57,191 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     );
   }
 
+  void _showCurrencyPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                '選擇幣別',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            ..._currencies.map((c) => ListTile(
+                  title: Text(c),
+                  trailing: _selectedCurrency == c
+                      ? Icon(
+                          Icons.check_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () {
+                    setState(() => _selectedCurrency = c);
+                    Navigator.pop(context);
+                  },
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('建立群組')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: '群組名稱',
-                  prefixIcon: Icon(Icons.group_outlined),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 群組名稱
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        child: TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            hintText: '群組名稱',
+                            prefixIcon: Icon(Icons.group_outlined),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '請輸入群組名稱';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 群組類型
+                    Text(
+                      '群組類型',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SegmentedButton<GroupType>(
+                          segments: GroupType.values
+                              .where((t) => t != GroupType.other)
+                              .map(
+                                (type) => ButtonSegment(
+                                  value: type,
+                                  label: Text(type.label),
+                                ),
+                              )
+                              .toList(),
+                          selected: {_selectedType},
+                          onSelectionChanged: (selected) {
+                            setState(() => _selectedType = selected.first);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 幣別
+                    Text(
+                      '幣別',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.attach_money),
+                        title: const Text('幣別'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _selectedCurrency,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: _showCurrencyPicker,
+                      ),
+                    ),
+                  ],
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '請輸入群組名稱';
-                  }
-                  return null;
-                },
               ),
-              const SizedBox(height: 24),
-              Text('群組類型', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              SegmentedButton<GroupType>(
-                segments: GroupType.values
-                    .where((t) => t != GroupType.other)
-                    .map(
-                      (type) =>
-                          ButtonSegment(value: type, label: Text(type.label)),
-                    )
-                    .toList(),
-                selected: {_selectedType},
-                onSelectionChanged: (selected) {
-                  setState(() => _selectedType = selected.first);
-                },
-              ),
-              const SizedBox(height: 24),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedCurrency,
-                decoration: const InputDecoration(
-                  labelText: '幣別',
-                  prefixIcon: Icon(Icons.attach_money),
-                ),
-                items: _currencies
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _selectedCurrency = value);
-                  }
-                },
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
+            ),
+          ),
+
+          // 固定底部提交按鈕
+          _buildSubmitBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubmitBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_errorMessage != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
                   _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                   textAlign: TextAlign.center,
                 ),
-              ],
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleCreate,
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('建立'),
               ),
             ],
-          ),
+            FilledButton(
+              onPressed: _isLoading ? null : _handleCreate,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('建立群組'),
+            ),
+          ],
         ),
       ),
     );

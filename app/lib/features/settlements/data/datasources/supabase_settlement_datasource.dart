@@ -64,12 +64,12 @@ class SupabaseSettlementDataSource {
 
   BalanceEntity _mapBalance(Map<String, dynamic> data) {
     return BalanceEntity(
-      userId: data['user_id'] as String,
+      userId: data['user_id'] as String? ?? '',
       displayName: data['display_name'] as String? ?? '',
       avatarUrl: data['avatar_url'] as String?,
-      totalPaid: (data['total_paid'] as num).toDouble(),
-      totalOwed: (data['total_owed'] as num).toDouble(),
-      netBalance: (data['net_balance'] as num).toDouble(),
+      totalPaid: (data['total_paid'] as num?)?.toDouble() ?? 0.0,
+      totalOwed: (data['total_owed'] as num?)?.toDouble() ?? 0.0,
+      netBalance: (data['net_balance'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -77,7 +77,7 @@ class SupabaseSettlementDataSource {
     return OverallBalanceEntity(
       groupId: data['group_id'] as String,
       groupName: data['group_name'] as String? ?? '',
-      netBalance: (data['net_balance'] as num).toDouble(),
+      netBalance: (data['net_balance'] as num?)?.toDouble() ?? 0.0,
       currency: data['currency'] as String? ?? 'TWD',
     );
   }
