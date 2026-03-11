@@ -36,14 +36,14 @@
                           └────────────────────────┘
 ```
 
-### 離線架構
+### 同步策略
 
 | 操作 | 策略 | 說明 |
 |------|------|------|
-| 寫入 | Local-first | 先寫 Hive，標記 `pending_sync`，背景同步至 Supabase |
-| 讀取 | Remote-first, local-fallback | 優先從 Supabase 讀取，失敗時降級使用 Hive 快取 |
-| 即時更新 | Supabase Realtime | 訂閱群組相關表格變更，推送更新至本地 |
-| 衝突處理 | Last-write-wins | 以 `updated_at` 時間戳為準，伺服器端為最終權威 |
+| 寫入 | Remote-first | 直接寫入 Supabase，失敗時回傳錯誤提示 |
+| 讀取 | Remote-first | 直接從 Supabase 讀取，透過 Riverpod 快取 |
+| 即時更新 | Supabase Realtime | 訂閱群組相關表格變更，自動 invalidate Provider |
+| 離線 | 暫不支援 | Hive 本地快取為未來規劃，目前需網路連線 |
 
 ---
 
@@ -119,17 +119,18 @@ CREATE TYPE expense_category AS ENUM (
 );
 
 CREATE TABLE expenses (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  group_id     UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-  paid_by      UUID NOT NULL REFERENCES profiles(id),
-  amount       NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-  currency     TEXT NOT NULL DEFAULT 'TWD',
-  category     expense_category NOT NULL DEFAULT 'other',
-  description  TEXT NOT NULL,
-  note         TEXT,
-  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id         UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  paid_by          UUID NOT NULL REFERENCES profiles(id),
+  amount           NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  currency         TEXT NOT NULL DEFAULT 'TWD',
+  category         expense_category NOT NULL DEFAULT 'other',
+  description      TEXT NOT NULL,
+  note             TEXT,
+  expense_date     DATE NOT NULL DEFAULT CURRENT_DATE,
+  attachment_urls  TEXT[],
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_expenses_group_id ON expenses(group_id);
@@ -144,14 +145,30 @@ CREATE TABLE expense_splits (
   expense_id UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
   user_id    UUID NOT NULL REFERENCES profiles(id),
   amount     NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-  split_type TEXT NOT NULL DEFAULT 'equal' CHECK (split_type IN ('equal', 'custom_ratio', 'fixed_amount')),
+  split_type TEXT NOT NULL DEFAULT 'equal' CHECK (split_type IN ('equal', 'custom_ratio', 'fixed_amount', 'itemized')),
   UNIQUE (expense_id, user_id)
 );
 
 CREATE INDEX idx_expense_splits_expense_id ON expense_splits(expense_id);
 ```
 
-### 2.6 `settlements` — 結算記錄
+### 2.6 `expense_items` — 項目拆分明細
+
+```sql
+CREATE TABLE expense_items (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expense_id      UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  amount          NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  shared_by_users UUID[] NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX idx_expense_items_expense_id ON expense_items(expense_id);
+```
+
+> 僅 `split_type = 'itemized'` 的消費會有對應的 expense_items 記錄。
+
+### 2.7 `settlements` — 結算記錄
 
 ```sql
 CREATE TABLE settlements (
@@ -169,7 +186,7 @@ CREATE TABLE settlements (
 CREATE INDEX idx_settlements_group_id ON settlements(group_id);
 ```
 
-### 2.7 `updated_at` 自動更新
+### 2.8 `updated_at` 自動更新
 
 ```sql
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -197,6 +214,7 @@ profiles ──────< group_members >────── groups
     │                                      │
     │                                      │
     ├──< expenses ──< expense_splits       │
+    │         └──< expense_items           │
     │                                      │
     └──< settlements (from/to) >───────────┘
 ```
@@ -732,18 +750,13 @@ abstract class ExpenseRemoteDataSource {
 // 3. Repository Implementation
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final ExpenseRemoteDataSource _remote;
-  final ExpenseLocalDataSource _local;
 
   @override
   Future<Either<Failure, List<Expense>>> getExpenses(String groupId) async {
     try {
       final expenses = await _remote.getExpenses(groupId);
-      await _local.cacheExpenses(groupId, expenses);
       return Right(expenses.map((m) => m.toEntity()).toList());
     } catch (e) {
-      // fallback to local cache
-      final cached = await _local.getCachedExpenses(groupId);
-      if (cached != null) return Right(cached);
       return Left(ServerFailure(e.toString()));
     }
   }
@@ -859,75 +872,41 @@ final appRouter = GoRouter(
 
 ## 6. 資料流與同步策略
 
-### 6.1 寫入流程（Local-first）
+### 6.1 寫入流程
 
 ```
 使用者操作
     │
     ▼
-┌─────────────┐
-│ 寫入 Hive   │  ← 立即完成，UI 即時反應
-│ pending_sync │
-└──────┬──────┘
-       │ (背景)
+┌──────────────┐     成功     ┌──────────────────────┐
+│ 寫入 Supabase│───────────→ │ Invalidate Provider   │
+│              │             │ UI 自動重新讀取         │
+└──────┬───────┘             └──────────────────────┘
+       │ 失敗
        ▼
+┌──────────────┐
+│ 回傳錯誤     │  ← SnackBar 顯示錯誤訊息
+└──────────────┘
+```
+
+### 6.2 讀取流程
+
+```
+使用者請求資料（FutureProvider）
+    │
+    ▼
 ┌──────────────┐     成功     ┌──────────────┐
-│ 同步 Supabase │───────────→│ 移除 pending  │
-│              │             │ 更新本地資料   │
+│ 讀取 Supabase│───────────→ │ 更新 Provider │
+│              │             │ 渲染 UI       │
 └──────┬───────┘             └──────────────┘
        │ 失敗
        ▼
 ┌──────────────┐
-│ 保留 pending │  ← 下次上線時重試
-│ 排程重試     │
+│ AsyncError   │  ← AppErrorWidget + retry callback
 └──────────────┘
 ```
 
-### 6.2 讀取流程（Remote-first）
-
-```
-使用者請求資料
-    │
-    ▼
-┌──────────────┐     成功     ┌──────────────┐
-│ 讀取 Supabase │───────────→│ 更新 Hive 快取│
-│              │             │ 回傳資料      │
-└──────┬───────┘             └──────────────┘
-       │ 失敗 (離線)
-       ▼
-┌──────────────┐
-│ 讀取 Hive    │  ← 降級使用本地快取
-│ 顯示離線提示  │
-└──────────────┘
-```
-
-### 6.3 Hive Box 結構
-
-| Box 名稱 | Key | Value | 說明 |
-|----------|-----|-------|------|
-| `groups` | groupId | GroupModel JSON | 群組資料快取 |
-| `expenses_{groupId}` | expenseId | ExpenseModel JSON | 群組消費快取 |
-| `balances_{groupId}` | `balances` | List\<BalanceModel\> JSON | 餘額快取 |
-| `pending_sync` | auto-increment | SyncOperation JSON | 待同步操作佇列 |
-| `user_profile` | `profile` | ProfileModel JSON | 使用者資料快取 |
-
-### 6.4 SyncOperation 結構
-
-```dart
-@freezed
-class SyncOperation with _$SyncOperation {
-  const factory SyncOperation({
-    required String id,
-    required String table,       // 'expenses', 'settlements', etc.
-    required String operation,   // 'insert', 'update', 'delete'
-    required Map<String, dynamic> data,
-    required DateTime createdAt,
-    @Default(0) int retryCount,
-  }) = _SyncOperation;
-}
-```
-
-### 6.5 Realtime 訂閱管理
+### 6.3 Realtime 訂閱管理
 
 進入群組詳情頁時啟動訂閱，離開時取消：
 
@@ -955,16 +934,19 @@ final groupRealtimeProvider = StreamProvider.family<void, String>(
 
 ## 7. MVP 功能與技術對照
 
-| PRD P0 功能 | DB 表格 | API 方法 | Feature 模組 |
-|-------------|---------|----------|-------------|
+| 功能 | DB 表格 | API 方法 | Feature 模組 |
+|------|---------|----------|-------------|
 | 帳號註冊/登入 | profiles | Auth SDK | auth |
 | 建立/加入群組 | groups, group_members | Client SDK + RPC | groups |
-| 新增消費記錄 | expenses, expense_splits | Client SDK | expenses |
-| 消費分類 | expenses.category | Client SDK | expenses |
-| 均分分帳 | expense_splits | Client SDK | expenses |
+| 新增消費記錄 | expenses, expense_splits | RPC: create_expense | expenses |
+| 消費分類（含自訂） | expenses.category | Client SDK | expenses |
+| 均分 / 比例 / 指定金額分帳 | expense_splits | RPC: create_expense | expenses |
+| 項目拆分分帳 | expense_splits, expense_items | RPC: create_expense | expenses |
+| 收據附件 | Supabase Storage | uploadAttachment() | expenses |
 | 欠款總覽 | — (計算) | RPC: get_user_balances | settlements |
 | 手動標記已付款 | settlements | Client SDK | settlements |
-| 基本 Dashboard | — (計算) | RPC: get_overall_balances | dashboard |
+| Dashboard | — (計算) | RPC: get_overall_balances | dashboard |
+| 消費統計 | expenses | Client SDK (aggregate) | expenses |
 
 ---
 
@@ -1023,7 +1005,7 @@ final groupRealtimeProvider = StreamProvider.family<void, String>(
 
 ---
 
-## 9. 新增消費畫面 UX 規格（Progressive Disclosure）
+## 9. 新增消費畫面 UX 規格 ✅
 
 ### 9.1 整體佈局
 
