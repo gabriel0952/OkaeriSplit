@@ -7,7 +7,8 @@ class SupabaseGroupDataSource {
   final SupabaseClient _client;
 
   Future<List<GroupEntity>> getGroups() async {
-    final userId = _client.auth.currentUser!.id;
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
     final response = await _client
         .from('group_members')
         .select('*, groups(*)')
@@ -49,7 +50,8 @@ class SupabaseGroupDataSource {
   }
 
   Future<void> leaveGroup(String groupId) async {
-    final userId = _client.auth.currentUser!.id;
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw Exception('使用者未登入');
     await _client
         .from('group_members')
         .delete()
@@ -80,7 +82,7 @@ class SupabaseGroupDataSource {
   }
 
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
-    final currentUserId = _client.auth.currentUser!.id;
+    final currentUserId = _client.auth.currentUser?.id ?? '';
     final response = await _client
         .from('profiles')
         .select('id, email, display_name, avatar_url')

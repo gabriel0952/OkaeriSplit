@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
@@ -8,12 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Subscribes to realtime changes on the `expenses` table for a given group.
-///
-/// Emits an incrementing counter on each change so that [ref.listen] in
-/// widgets can detect every event (Riverpod skips callbacks when the value
-/// is identical, so emitting `void` / `null` would only fire once).
 final realtimeExpensesProvider =
     StreamProvider.family<int, String>((ref, groupId) {
+  if (!ref.watch(isOnlineProvider)) return const Stream.empty();
+
   final client = ref.watch(supabaseClientProvider);
   final controller = StreamController<int>();
   var eventCount = 0;
@@ -30,6 +29,7 @@ final realtimeExpensesProvider =
           value: groupId,
         ),
         callback: (payload) {
+          if (controller.isClosed) return;
           ref.invalidate(expensesProvider(groupId));
           controller.add(++eventCount);
         },
@@ -47,6 +47,8 @@ final realtimeExpensesProvider =
 /// Subscribes to realtime changes on the `group_members` table for a given group.
 final realtimeGroupMembersProvider =
     StreamProvider.family<int, String>((ref, groupId) {
+  if (!ref.watch(isOnlineProvider)) return const Stream.empty();
+
   final client = ref.watch(supabaseClientProvider);
   final controller = StreamController<int>();
   var eventCount = 0;
@@ -63,6 +65,7 @@ final realtimeGroupMembersProvider =
           value: groupId,
         ),
         callback: (payload) {
+          if (controller.isClosed) return;
           ref.invalidate(groupMembersProvider(groupId));
           controller.add(++eventCount);
         },
@@ -80,6 +83,8 @@ final realtimeGroupMembersProvider =
 /// Subscribes to realtime changes on the `settlements` table for a given group.
 final realtimeSettlementsProvider =
     StreamProvider.family<int, String>((ref, groupId) {
+  if (!ref.watch(isOnlineProvider)) return const Stream.empty();
+
   final client = ref.watch(supabaseClientProvider);
   final controller = StreamController<int>();
   var eventCount = 0;
@@ -96,6 +101,7 @@ final realtimeSettlementsProvider =
           value: groupId,
         ),
         callback: (payload) {
+          if (controller.isClosed) return;
           ref.invalidate(balancesProvider(groupId));
           ref.invalidate(settlementsProvider(groupId));
           controller.add(++eventCount);

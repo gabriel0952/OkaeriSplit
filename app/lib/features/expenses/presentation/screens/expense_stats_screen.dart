@@ -1,4 +1,5 @@
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/expenses/domain/entities/expense_stats_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_stats_provider.dart';
@@ -30,7 +31,10 @@ class ExpenseStatsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('消費統計')),
-      body: expensesAsync.when(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: expensesAsync.when(
         loading: () => const AppLoadingWidget(),
         error: (error, _) => Center(child: Text(error.toString())),
         data: (_) {
@@ -84,6 +88,8 @@ class ExpenseStatsScreen extends ConsumerWidget {
             ],
           );
         },
+      )),
+        ],
       ),
     );
   }

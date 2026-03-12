@@ -71,13 +71,36 @@ class ExpenseCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Amount
-            Text(
-              '${expense.currency} ${expense.amount.toStringAsFixed(expense.amount.truncateToDouble() == expense.amount ? 0 : 2)}',
-              style: textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: colorScheme.onSurface,
-              ),
+            // Amount + pending indicator
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${expense.currency} ${expense.amount.toStringAsFixed(expense.amount.truncateToDouble() == expense.amount ? 0 : 2)}',
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                if (expense.isPending) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.cloud_upload_outlined,
+                          size: 11, color: colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 2),
+                      Text(
+                        '待同步',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ],
         ),

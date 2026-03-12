@@ -15,6 +15,7 @@ class ExpenseEntity {
     required this.updatedAt,
     this.splits = const [],
     this.attachmentUrls = const [],
+    this.isPending = false,
   });
 
   final String id;
@@ -30,6 +31,8 @@ class ExpenseEntity {
   final DateTime updatedAt;
   final List<ExpenseSplitEntity> splits;
   final List<String> attachmentUrls;
+  /// True when this expense is stored locally and not yet synced to the server.
+  final bool isPending;
 }
 
 class ExpenseSplitEntity {

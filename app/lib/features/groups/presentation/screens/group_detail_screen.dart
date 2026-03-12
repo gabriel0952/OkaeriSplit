@@ -1,6 +1,8 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
@@ -19,8 +21,11 @@ class GroupDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Activate realtime subscription for group members
-    ref.listen(realtimeGroupMembersProvider(groupId), (prev, next) {});
+    // Activate realtime subscription for group members (skipped when offline).
+    final isOnline = ref.watch(isOnlineProvider);
+    if (isOnline) {
+      ref.listen(realtimeGroupMembersProvider(groupId), (prev, next) {});
+    }
 
     final groupAsync = ref.watch(groupDetailProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
@@ -28,7 +33,11 @@ class GroupDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('群組詳情')),
-      body: groupAsync.when(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: groupAsync.when(
         loading: () => const AppLoadingWidget(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
@@ -314,6 +323,9 @@ class GroupDetailScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
+          ),
+        ],
       ),
     );
   }

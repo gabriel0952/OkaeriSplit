@@ -1,5 +1,9 @@
+import 'package:app/core/providers/connectivity_provider.dart';
+import 'package:app/core/services/sync_service.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/data/datasources/hive_expense_datasource.dart';
 import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
+import 'package:app/features/expenses/data/pending_expense_repository.dart';
 import 'package:app/features/expenses/data/repositories/expense_repository_impl.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
@@ -18,8 +22,31 @@ final supabaseExpenseDataSourceProvider = Provider<SupabaseExpenseDataSource>((
   return SupabaseExpenseDataSource(ref.watch(supabaseClientProvider));
 });
 
+final hiveExpenseDataSourceProvider = Provider<HiveExpenseDataSource>((ref) {
+  return HiveExpenseDataSource();
+});
+
+final pendingExpenseRepositoryProvider =
+    Provider<PendingExpenseRepository>((ref) {
+  return PendingExpenseRepository();
+});
+
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return SyncService(
+    ref.watch(pendingExpenseRepositoryProvider),
+    ref.watch(supabaseExpenseDataSourceProvider),
+    ref,
+  );
+});
+
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  return ExpenseRepositoryImpl(ref.watch(supabaseExpenseDataSourceProvider));
+  final isOnline = ref.watch(isOnlineProvider);
+  return ExpenseRepositoryImpl(
+    ref.watch(supabaseExpenseDataSourceProvider),
+    ref.watch(hiveExpenseDataSourceProvider),
+    ref.watch(pendingExpenseRepositoryProvider),
+    isOnline,
+  );
 });
 
 // Use cases
@@ -69,27 +96,16 @@ final expenseDetailProvider = FutureProvider.family<ExpenseEntity, String>((
 });
 
 /// Derives expense detail from the already-live [expensesProvider].
-///
-/// Since [expensesProvider] is invalidated directly by the realtime callback
-/// (and this is proven to work for the list screen), watching it here gives
-/// the detail screen automatic updates with zero extra plumbing.
-///
-/// Falls back to a direct API call if the expense isn't found in the list
-/// (e.g. navigated via deep link before the list loaded).
 final expenseDetailLiveProvider = FutureProvider.family<ExpenseEntity,
     ({String groupId, String expenseId})>((ref, params) async {
-  // This creates a Riverpod dependency: when expensesProvider is invalidated
-  // by the realtime callback, this provider automatically re-executes.
   final expensesAsync = ref.watch(expensesProvider(params.groupId));
 
-  // Try to find the expense in the already-fetched list.
   final expenses = expensesAsync.valueOrNull;
   if (expenses != null) {
     final match = expenses.where((e) => e.id == params.expenseId);
     if (match.isNotEmpty) return match.first;
   }
 
-  // Fallback: list not loaded yet or expense not found — fetch directly.
   final getExpenseDetail = ref.watch(getExpenseDetailUseCaseProvider);
   final result = await getExpenseDetail(params.expenseId);
   return result.fold(
@@ -104,6 +120,20 @@ final groupCategoriesProvider =
   ref,
   groupId,
 ) async {
-  final ds = ref.watch(supabaseExpenseDataSourceProvider);
-  return ds.getGroupCategories(groupId);
+  final isOnline = ref.watch(isOnlineProvider);
+  if (!isOnline) return [];
+  try {
+    final ds = ref.watch(supabaseExpenseDataSourceProvider);
+    return ds.getGroupCategories(groupId);
+  } catch (_) {
+    return [];
+  }
+});
+
+/// Number of pending (offline) expenses waiting to sync.
+final pendingCountProvider = Provider<int>((ref) {
+  final repo = ref.watch(pendingExpenseRepositoryProvider);
+  // Re-evaluate when connectivity changes (flush may have cleared items).
+  ref.watch(connectivityProvider);
+  return repo.count();
 });

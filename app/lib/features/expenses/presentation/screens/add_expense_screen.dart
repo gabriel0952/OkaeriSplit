@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:app/core/constants/app_constants.dart';
+import 'package:app/core/providers/connectivity_provider.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/expenses/domain/utils/split_calculator.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
@@ -99,9 +101,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final groupAsync = ref.watch(groupDetailProvider(widget.groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
 
+    final isOnline = ref.watch(isOnlineProvider);
+
     // Load existing expense data in edit mode
     if (widget.isEditing && !_isLoaded) {
-      final expenseAsync = ref.watch(expenseDetailProvider(widget.expenseId!));
+      // Use live provider (backed by cached expensesProvider) to work offline.
+      final liveKey = (groupId: widget.groupId, expenseId: widget.expenseId!);
+      final expenseAsync = ref.watch(expenseDetailLiveProvider(liveKey));
       return Scaffold(
         appBar: AppBar(title: const Text('編輯消費')),
         body: expenseAsync.when(
@@ -136,6 +142,21 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             }
             return const AppLoadingWidget();
           },
+        ),
+      );
+    }
+
+    // Block editing while offline — edits require network.
+    if (widget.isEditing && !isOnline) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('編輯消費')),
+        body: Column(
+          children: [
+            const OfflineBanner(),
+            const Expanded(
+              child: Center(child: Text('離線時無法編輯消費，請恢復網路後再試')),
+            ),
+          ],
         ),
       );
     }
@@ -179,14 +200,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final amount = double.tryParse(_amountController.text) ?? 0;
     final canSubmit = amount > 0 && _descriptionController.text.trim().isNotEmpty;
 
-    return Column(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: Column(
       children: [
+        const OfflineBanner(),
         // [A] Amount section — fixed at top
         _buildAmountSection(context, currency),
 
         // [B] Scrollable form body
         Expanded(
           child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
               const SizedBox(height: 16),
@@ -212,7 +238,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         // [C] Fixed bottom submit button
         _buildSubmitButton(context, currency, canSubmit),
       ],
-    );
+    ));
   }
 
   // ─── [A] Amount Section ─────────────────────────────────────────────────
@@ -231,11 +257,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Task 3.4: de-emphasised currency chip
+            // Currency chip — tappable to change currency
             GestureDetector(
               onTap: () => _showCurrencyPicker(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: colorScheme.outlineVariant,
@@ -243,14 +269,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  _selectedCurrency ?? currency,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: colorScheme.onSurfaceVariant,
-                    letterSpacing: 0.5,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _selectedCurrency ?? currency,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurfaceVariant,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -759,6 +795,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     List<GroupMemberEntity> members,
     double amount,
   ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(6),
+      borderSide: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
+    );
+    const labelStyle = TextStyle(fontSize: 13);
+    const fieldStyle = TextStyle(fontSize: 13);
+
     final ratios = <String, int>{};
     for (final id in _selectedMemberIds) {
       ratios[id] = int.tryParse(_ratioControllers[id]?.text ?? '1') ?? 1;
@@ -767,39 +811,48 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ? SplitCalculator.calculateRatioSplits(amount, ratios)
         : <String, double>{};
 
+    // Right-side total: 52 (field) + 8 (gap) + 60 (calc) = 120px
+    // Fixed amount uses the same 120px so the name column never shifts.
     return members.map((member) {
       final isSelected = _selectedMemberIds.contains(member.userId);
       if (!isSelected) return const SizedBox.shrink();
       final splitAmount = ratioSplits[member.userId] ?? 0.0;
 
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 6),
         child: Row(
           children: [
-            Expanded(child: Text(member.displayName)),
+            Expanded(
+              child: Text(member.displayName, style: labelStyle),
+            ),
             SizedBox(
-              width: 64,
+              width: 52,
               child: TextField(
                 controller: _ratioControllers[member.userId],
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                decoration: const InputDecoration(
+                style: fieldStyle,
+                decoration: InputDecoration(
                   isDense: true,
                   contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  border: inputBorder,
+                  enabledBorder: inputBorder,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                  ),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
             ),
             const SizedBox(width: 8),
             SizedBox(
-              width: 80,
+              width: 60,
               child: Text(
                 amount > 0 ? '\$${splitAmount.toStringAsFixed(2)}' : '',
                 textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
               ),
             ),
           ],
@@ -813,26 +866,42 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     List<GroupMemberEntity> members,
     double amount,
   ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(6),
+      borderSide: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
+    );
+    const labelStyle = TextStyle(fontSize: 13);
+    const fieldStyle = TextStyle(fontSize: 13);
+
     return [
       ...members.map((member) {
         final isSelected = _selectedMemberIds.contains(member.userId);
         if (!isSelected) return const SizedBox.shrink();
+        // Right-side total: 120px — same as ratio mode so name column is stable.
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Expanded(child: Text(member.displayName)),
+              Expanded(child: Text(member.displayName, style: labelStyle)),
               SizedBox(
-                width: 100,
+                width: 120,
                 child: TextField(
                   controller: _fixedAmountControllers[member.userId],
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
+                  textAlign: TextAlign.right,
+                  style: fieldStyle,
+                  decoration: InputDecoration(
                     isDense: true,
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     prefixText: '\$ ',
+                    border: inputBorder,
+                    enabledBorder: inputBorder,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                    ),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -903,9 +972,25 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     flex: 2,
                     child: TextField(
                       controller: item.nameController,
-                      decoration: const InputDecoration(
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
                         labelText: '品項名稱',
+                        labelStyle: const TextStyle(fontSize: 12),
                         isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -914,10 +999,26 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     child: TextField(
                       controller: item.amountController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
                         labelText: '金額',
+                        labelStyle: const TextStyle(fontSize: 12),
                         prefixText: '\$ ',
                         isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -1400,6 +1501,30 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               .showSnackBar(SnackBar(content: Text(failure.message)));
         },
         (expenseId) async {
+          final isOnline = ref.read(isOnlineProvider);
+          if (!isOnline) {
+            // Saved to pending queue — refresh list so pending item shows,
+            // then show offline message and pop.
+            ref.invalidate(expensesProvider(widget.groupId));
+            ref.invalidate(pendingCountProvider);
+            setState(() => _isSubmitting = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.cloud_upload_outlined, color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text('已排程，連線後自動同步'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              context.pop();
+            }
+            return;
+          }
           if (hasAttachmentChanges) {
             try {
               final urls = await _processAttachments(expenseId);
@@ -1418,7 +1543,21 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           }
           setState(() => _isSubmitting = false);
           ref.invalidate(expensesProvider(widget.groupId));
-          if (mounted) context.pop();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text('消費已新增'),
+                  ],
+                ),
+                duration: Duration(milliseconds: 1500),
+              ),
+            );
+            context.pop();
+          }
         },
       );
     }

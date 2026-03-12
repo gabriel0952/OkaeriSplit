@@ -1,5 +1,7 @@
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/empty_state_widget.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:app/features/settlements/presentation/widgets/settlement_card.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +18,11 @@ class SettlementHistoryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('結算歷史')),
-      body: settlementsAsync.when(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: settlementsAsync.when(
         loading: () => const AppLoadingWidget(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
@@ -24,29 +30,10 @@ class SettlementHistoryScreen extends ConsumerWidget {
         ),
         data: (settlements) {
           if (settlements.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.history_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '目前沒有結算紀錄',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '完成付款後會顯示在這裡',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+            return const EmptyStateWidget(
+              icon: Icons.handshake_outlined,
+              title: '尚無結算紀錄',
+              subtitle: '完成付款後會顯示在這裡',
             );
           }
 
@@ -63,6 +50,9 @@ class SettlementHistoryScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+          ),
+        ],
       ),
     );
   }

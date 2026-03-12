@@ -1,7 +1,10 @@
 import 'package:app/core/constants/app_constants.dart';
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/providers/realtime_provider.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
-import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/empty_state_widget.dart';
+import 'package:app/core/widgets/skeleton_box.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
@@ -23,15 +26,52 @@ class ExpenseListScreen extends ConsumerStatefulWidget {
 
 class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
   String _searchQuery = '';
+  bool _showSearch = false;
   Set<String> _selectedCategories = {};
   String? _selectedPayer;
   DateTimeRange? _dateRange;
 
   @override
+  void initState() {
+    super.initState();
+    // Flush pending expenses as soon as this screen is open and online.
+    // This is a reliable fallback in case the global listener in main.dart
+    // missed the connectivity change event.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(isOnlineProvider)) {
+        ref.read(syncServiceProvider).flush();
+      }
+      // Also listen for subsequent connectivity changes while on this screen.
+      ref.listenManual(isOnlineProvider, (prev, next) {
+        if (next == true && prev == false) {
+          ref.read(syncServiceProvider).flush();
+        }
+      });
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _showSearch = !_showSearch;
+      if (_showSearch) {
+        // 展開後自動 focus
+        Future.microtask(() => _searchFocusNode.requestFocus());
+      } else {
+        // 收起時清除查詢
+        _searchController.clear();
+        _searchQuery = '';
+        _searchFocusNode.unfocus();
+      }
+    });
   }
 
   List<ExpenseEntity> _applyFilters(List<ExpenseEntity> expenses) {
@@ -369,10 +409,39 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
     final expensesAsync = ref.watch(expensesProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
 
+    final pendingCount = ref.watch(pendingCountProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('消費紀錄'),
         actions: [
+          if (pendingCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '待同步 $pendingCount 筆',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+          IconButton(
+            icon: Icon(_showSearch ? Icons.search_off : Icons.search),
+            tooltip: '搜尋',
+            onPressed: _toggleSearch,
+          ),
           Badge(
             isLabelVisible: _advancedFilterCount > 0,
             label: Text('$_advancedFilterCount'),
@@ -389,37 +458,27 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
         onPressed: () => context.push('/groups/$groupId/add-expense'),
         child: const Icon(Icons.add),
       ),
-      body: expensesAsync.when(
-        loading: () => const AppLoadingWidget(),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeIn,
+              child: KeyedSubtree(
+                key: ValueKey(expensesAsync.valueOrNull?.length ?? -1),
+                child: expensesAsync.when(
+        loading: () => const ExpenseListSkeleton(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
           onRetry: () => ref.invalidate(expensesProvider(groupId)),
         ),
         data: (expenses) {
           if (expenses.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '還沒有消費紀錄',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '點擊右下角按鈕新增第一筆消費',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+            return const EmptyStateWidget(
+              icon: Icons.receipt_long_outlined,
+              title: '尚無消費紀錄',
+              subtitle: '點擊 + 新增第一筆消費',
             );
           }
 
@@ -465,19 +524,30 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
 
           return RefreshIndicator(
             onRefresh: () async {
+              // Upload any pending expenses first, then refresh the list.
+              if (ref.read(isOnlineProvider)) {
+                await ref.read(syncServiceProvider).flush();
+              }
               ref.invalidate(expensesProvider(groupId));
             },
             child: Column(
               children: [
-                // 搜尋列（常駐）
-                _SearchBar(
-                  controller: _searchController,
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  hasAdvancedFilters: _advancedFilterCount > 0,
-                  onClearSearch: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
+                // 搜尋列（點擊搜尋圖示才展開）
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: _showSearch
+                      ? _SearchBar(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
+                          onClearSearch: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : const SizedBox.shrink(),
                 ),
 
                 // Content
@@ -629,9 +699,11 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                                                   memberMap[expense.paidBy],
                                               customCategories: customCategories,
                                               showCard: false,
-                                              onTap: () => context.push(
-                                                '/groups/$groupId/expenses/${expense.id}',
-                                              ),
+                                              onTap: expense.isPending
+                                                  ? null
+                                                  : () => context.push(
+                                                        '/groups/$groupId/expenses/${expense.id}',
+                                                      ),
                                             ))
                                         .toList(),
                                   ),
@@ -646,6 +718,11 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           );
         },
       ),
+              ),   // KeyedSubtree
+            ),     // AnimatedSwitcher
+          ),
+        ],
+      ),
     );
   }
 }
@@ -655,14 +732,14 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
 class _SearchBar extends StatelessWidget {
   const _SearchBar({
     required this.controller,
+    required this.focusNode,
     required this.onChanged,
-    required this.hasAdvancedFilters,
     required this.onClearSearch,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final ValueChanged<String> onChanged;
-  final bool hasAdvancedFilters;
   final VoidCallback onClearSearch;
 
   @override
@@ -674,6 +751,7 @@ class _SearchBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: TextField(
             controller: controller,
+            focusNode: focusNode,
             onChanged: onChanged,
             decoration: InputDecoration(
               hintText: '搜尋消費描述…',

@@ -1,5 +1,9 @@
 import 'package:app/core/constants/app_constants.dart';
+import 'package:app/core/providers/connectivity_provider.dart';
+import 'package:app/core/services/connectivity_service.dart';
+import 'package:app/core/services/home_widget_service.dart';
 import 'package:app/core/theme/app_theme.dart';
+import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/routing/app_router.dart';
 import 'package:flutter/material.dart';
@@ -22,16 +26,65 @@ Future<void> main() async {
 
   // Initialize Hive
   await Hive.initFlutter();
-  await Hive.openBox('settings');
+  await Future.wait([
+    Hive.openBox('settings'),
+    Hive.openBox('groups_cache'),
+    Hive.openBox('expenses_cache'),
+    Hive.openBox('group_members_cache'),
+    Hive.openBox('pending_expenses'),
+  ]);
+
+  // Check real connectivity before runApp so isOnline is accurate from start.
+  await ConnectivityService.instance.init();
+
+  // Initialize HomeWidget App Group
+  await HomeWidgetService.instance.init();
 
   runApp(const ProviderScope(child: OkaeriSplitApp()));
 }
 
-class OkaeriSplitApp extends ConsumerWidget {
+class OkaeriSplitApp extends ConsumerStatefulWidget {
   const OkaeriSplitApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OkaeriSplitApp> createState() => _OkaeriSplitAppState();
+}
+
+class _OkaeriSplitAppState extends ConsumerState<OkaeriSplitApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Listen to connectivity changes and flush pending expenses when back online.
+    ref.listenManual(connectivityProvider, (prev, next) {
+      next.whenData((isOnline) {
+        if (isOnline) {
+          ref.read(syncServiceProvider).flush();
+        }
+      });
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final isOnline = ref.read(isOnlineProvider);
+      if (isOnline) {
+        ref.read(syncServiceProvider).flush();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
 

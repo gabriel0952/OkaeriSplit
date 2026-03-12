@@ -1,6 +1,9 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
-import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/empty_state_widget.dart';
+import 'package:app/core/widgets/skeleton_box.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/settlements/domain/entities/settlement_entity.dart';
@@ -19,8 +22,11 @@ class BalanceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Activate realtime subscription for settlements & balances
-    ref.listen(realtimeSettlementsProvider(groupId), (prev, next) {});
+    // Activate realtime subscription for settlements & balances (online only)
+    final isOnline = ref.watch(isOnlineProvider);
+    if (isOnline) {
+      ref.listen(realtimeSettlementsProvider(groupId), (prev, next) {});
+    }
 
     final balancesAsync = ref.watch(balancesProvider(groupId));
     final groupAsync = ref.watch(groupDetailProvider(groupId));
@@ -37,37 +43,22 @@ class BalanceScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: balancesAsync.when(
-        loading: () => const AppLoadingWidget(),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: balancesAsync.when(
+        loading: () => const BalanceSkeleton(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
           onRetry: () => ref.invalidate(balancesProvider(groupId)),
         ),
         data: (balances) {
           if (balances.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '目前沒有帳務資料',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '新增消費後即可查看帳務總覽',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+            return const EmptyStateWidget(
+              icon: Icons.check_circle_outline,
+              title: '帳目已清空',
+              subtitle: '群組內沒有未清的帳款',
             );
           }
 
@@ -150,6 +141,9 @@ class BalanceScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+          ),
+        ],
       ),
     );
   }

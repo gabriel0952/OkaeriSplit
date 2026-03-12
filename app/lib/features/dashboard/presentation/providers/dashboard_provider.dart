@@ -13,8 +13,12 @@ final recentExpensesProvider =
   final allExpenses = <ExpenseEntity>[];
 
   for (final group in groups) {
-    final expensesResult = await ref.watch(expensesProvider(group.id).future);
-    allExpenses.addAll(expensesResult);
+    try {
+      final expenses = await ref.watch(expensesProvider(group.id).future);
+      allExpenses.addAll(expenses);
+    } catch (_) {
+      // Skip groups whose expenses can't be loaded (e.g. offline + no cache).
+    }
   }
 
   allExpenses.sort((a, b) => b.expenseDate.compareTo(a.expenseDate));

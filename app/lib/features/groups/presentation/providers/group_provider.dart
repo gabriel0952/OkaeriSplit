@@ -1,4 +1,7 @@
+import 'package:app/core/providers/connectivity_provider.dart';
+import 'package:app/core/services/home_widget_service.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/groups/data/datasources/hive_group_datasource.dart';
 import 'package:app/features/groups/data/datasources/supabase_group_datasource.dart';
 import 'package:app/features/groups/data/repositories/group_repository_impl.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
@@ -21,8 +24,17 @@ final supabaseGroupDataSourceProvider = Provider<SupabaseGroupDataSource>((
   return SupabaseGroupDataSource(ref.watch(supabaseClientProvider));
 });
 
+final hiveGroupDataSourceProvider = Provider<HiveGroupDataSource>((ref) {
+  return HiveGroupDataSource();
+});
+
 final groupRepositoryProvider = Provider<GroupRepository>((ref) {
-  return GroupRepositoryImpl(ref.watch(supabaseGroupDataSourceProvider));
+  final isOnline = ref.watch(isOnlineProvider);
+  return GroupRepositoryImpl(
+    ref.watch(supabaseGroupDataSourceProvider),
+    ref.watch(hiveGroupDataSourceProvider),
+    isOnline,
+  );
 });
 
 // Use cases
@@ -68,7 +80,10 @@ final groupsProvider = FutureProvider<List<GroupEntity>>((ref) async {
   final result = await getGroups();
   return result.fold(
     (failure) => throw Exception(failure.message),
-    (groups) => groups,
+    (groups) {
+      HomeWidgetService.instance.updateGroups(groups);
+      return groups;
+    },
   );
 });
 

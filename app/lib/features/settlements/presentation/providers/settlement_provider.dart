@@ -1,3 +1,4 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/settlements/data/datasources/supabase_settlement_datasource.dart';
@@ -43,12 +44,13 @@ final markSettledUseCaseProvider = Provider<MarkSettled>((ref) {
 // Presentation providers
 final balancesProvider =
     FutureProvider.family<List<BalanceEntity>, String>((ref, groupId) async {
+  final isOnline = ref.watch(isOnlineProvider);
+  if (!isOnline) return [];
+
   final getBalances = ref.watch(getBalancesUseCaseProvider);
   final result = await getBalances(groupId);
-  return result.fold(
-    (failure) => throw Exception(failure.message),
-    (balances) => balances,
-  );
+  // Return empty list on error instead of throwing — prevents cascade crashes.
+  return result.fold((failure) => [], (balances) => balances);
 });
 
 final settlementsProvider =
@@ -56,12 +58,12 @@ final settlementsProvider =
   ref,
   groupId,
 ) async {
+  final isOnline = ref.watch(isOnlineProvider);
+  if (!isOnline) return [];
+
   final getSettlements = ref.watch(getSettlementsUseCaseProvider);
   final result = await getSettlements(groupId);
-  return result.fold(
-    (failure) => throw Exception(failure.message),
-    (settlements) => settlements,
-  );
+  return result.fold((failure) => [], (settlements) => settlements);
 });
 
 final simplifiedDebtsProvider =
@@ -76,6 +78,10 @@ final overallBalancesProvider =
   final currentUser = ref.watch(authStateProvider).valueOrNull;
   if (currentUser == null) return [];
 
+  // Balance data is server-computed; show empty list when offline.
+  final isOnline = ref.watch(isOnlineProvider);
+  if (!isOnline) return [];
+
   final getOverallBalances = ref.watch(getOverallBalancesUseCaseProvider);
   final result = await getOverallBalances(currentUser.id);
 
@@ -83,7 +89,8 @@ final overallBalancesProvider =
   final currencyMap = {for (final g in groups) g.id: g.currency};
 
   return result.fold(
-    (failure) => throw Exception(failure.message),
+    // On error return empty instead of throwing — dashboard should not crash.
+    (failure) => [],
     (balances) => balances.map((b) {
       if (b.currency != 'TWD' || !currencyMap.containsKey(b.groupId)) return b;
       return OverallBalanceEntity(

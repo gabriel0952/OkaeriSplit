@@ -1,4 +1,6 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/theme/theme_provider.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
@@ -12,10 +14,14 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileProvider);
+    final isOnline = ref.watch(isOnlineProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('我的')),
-      body: profileAsync.when(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),
         data: (profile) {
@@ -46,8 +52,13 @@ class ProfileScreen extends ConsumerWidget {
                     ListTile(
                       title: const Text('顯示名稱'),
                       subtitle: Text(profile.displayName),
-                      trailing: const Icon(Icons.edit),
-                      onTap: () => _editDisplayName(context, ref, profile.displayName),
+                      trailing: Icon(Icons.edit,
+                          color: isOnline ? null : Theme.of(context).colorScheme.onSurfaceVariant),
+                      onTap: isOnline
+                          ? () => _editDisplayName(context, ref, profile.displayName)
+                          : () => ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('離線時無法編輯個人資料')),
+                              ),
                     ),
                     const Divider(height: 1),
                     ListTile(
@@ -58,8 +69,13 @@ class ProfileScreen extends ConsumerWidget {
                     ListTile(
                       title: const Text('預設幣別'),
                       subtitle: Text(profile.defaultCurrency),
-                      trailing: const Icon(Icons.edit),
-                      onTap: () => _editCurrency(context, ref, profile.defaultCurrency),
+                      trailing: Icon(Icons.edit,
+                          color: isOnline ? null : Theme.of(context).colorScheme.onSurfaceVariant),
+                      onTap: isOnline
+                          ? () => _editCurrency(context, ref, profile.defaultCurrency)
+                          : () => ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('離線時無法編輯個人資料')),
+                              ),
                     ),
                   ],
                 ),
@@ -147,6 +163,8 @@ class ProfileScreen extends ConsumerWidget {
             ],
           );
         },
+      )),
+        ],
       ),
     );
   }

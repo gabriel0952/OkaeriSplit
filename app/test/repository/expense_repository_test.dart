@@ -1,5 +1,7 @@
 import 'package:app/core/errors/failures.dart';
+import 'package:app/features/expenses/data/datasources/hive_expense_datasource.dart';
 import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
+import 'package:app/features/expenses/data/pending_expense_repository.dart';
 import 'package:app/features/expenses/data/repositories/expense_repository_impl.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/core/constants/app_constants.dart';
@@ -9,13 +11,29 @@ import 'package:mocktail/mocktail.dart';
 class MockSupabaseExpenseDataSource extends Mock
     implements SupabaseExpenseDataSource {}
 
+class MockHiveExpenseDataSource extends Mock
+    implements HiveExpenseDataSource {}
+
+class MockPendingExpenseRepository extends Mock
+    implements PendingExpenseRepository {}
+
 void main() {
   late MockSupabaseExpenseDataSource mockDataSource;
+  late MockHiveExpenseDataSource mockHive;
+  late MockPendingExpenseRepository mockPending;
   late ExpenseRepositoryImpl repository;
 
   setUp(() {
     mockDataSource = MockSupabaseExpenseDataSource();
-    repository = ExpenseRepositoryImpl(mockDataSource);
+    mockHive = MockHiveExpenseDataSource();
+    mockPending = MockPendingExpenseRepository();
+    // isOnline = true for most tests
+    repository = ExpenseRepositoryImpl(
+      mockDataSource,
+      mockHive,
+      mockPending,
+      true,
+    );
   });
 
   final tExpense = ExpenseEntity(
@@ -48,9 +66,11 @@ void main() {
   );
 
   group('getExpenses', () {
-    test('returns Right with expenses on success', () async {
+    test('returns Right with expenses on success (online)', () async {
       when(() => mockDataSource.getExpenses('group-1'))
           .thenAnswer((_) async => [tExpense]);
+      when(() => mockHive.saveExpenses('group-1', any()))
+          .thenAnswer((_) async {});
 
       final result = await repository.getExpenses('group-1');
 
@@ -62,6 +82,21 @@ void main() {
           expect(expenses.first.id, 'exp-1');
         },
       );
+    });
+
+    test('returns cache when offline', () async {
+      final offlineRepo = ExpenseRepositoryImpl(
+        mockDataSource,
+        mockHive,
+        mockPending,
+        false, // offline
+      );
+      when(() => mockHive.getExpenses('group-1')).thenReturn([tExpense]);
+
+      final result = await offlineRepo.getExpenses('group-1');
+
+      expect(result.isRight(), isTrue);
+      verifyNever(() => mockDataSource.getExpenses(any()));
     });
 
     test('returns Left(ServerFailure) on exception', () async {

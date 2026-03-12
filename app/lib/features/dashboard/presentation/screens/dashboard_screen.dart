@@ -1,5 +1,6 @@
 import 'package:app/core/widgets/app_error_widget.dart';
-import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/skeleton_box.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/dashboard/presentation/providers/dashboard_provider.dart';
 import 'package:app/features/dashboard/presentation/widgets/balance_summary_card.dart';
 import 'package:app/features/dashboard/presentation/widgets/group_balance_row.dart';
@@ -19,7 +20,11 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('總覽')),
-      body: RefreshIndicator(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(overallBalancesProvider);
           ref.invalidate(recentExpensesProvider);
@@ -29,7 +34,7 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             // Balance summary
             overallAsync.when(
-              loading: () => const AppLoadingWidget(),
+              loading: () => const BalanceSkeleton(),
               error: (error, _) => AppErrorWidget(
                 message: error.toString(),
                 onRetry: () => ref.invalidate(overallBalancesProvider),
@@ -86,7 +91,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             recentAsync.when(
-              loading: () => const AppLoadingWidget(),
+              loading: () => const ExpenseListSkeleton(),
               error: (error, _) => AppErrorWidget(
                 message: error.toString(),
                 onRetry: () => ref.invalidate(recentExpensesProvider),
@@ -95,6 +100,9 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
+            ),
+          ),
+        ],
       ),
     );
   }

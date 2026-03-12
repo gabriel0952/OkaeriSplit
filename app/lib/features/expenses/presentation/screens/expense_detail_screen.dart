@@ -1,6 +1,8 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/providers/realtime_provider.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
@@ -23,9 +25,11 @@ class ExpenseDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Keep the realtime subscription alive so that expensesProvider gets
-    // invalidated when another device changes data.
-    ref.listen(realtimeExpensesProvider(groupId), (prev, next) {});
+    final isOnline = ref.watch(isOnlineProvider);
+    // Keep the realtime subscription alive (online only).
+    if (isOnline) {
+      ref.listen(realtimeExpensesProvider(groupId), (prev, next) {});
+    }
 
     // expenseDetailLiveProvider watches expensesProvider(groupId) internally.
     // When the realtime callback invalidates expensesProvider, Riverpod's
@@ -39,7 +43,10 @@ class ExpenseDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('消費詳情')),
-      body: expenseAsync.when(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: expenseAsync.when(
         loading: () => const AppLoadingWidget(),
         error: (error, _) => AppErrorWidget(
           message: error.toString(),
@@ -205,6 +212,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
             ],
           );
         },
+      )),
+        ],
       ),
     );
   }

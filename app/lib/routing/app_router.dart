@@ -13,16 +13,78 @@ import 'package:app/features/profile/presentation/screens/profile_screen.dart';
 import 'package:app/features/settlements/presentation/screens/balance_screen.dart';
 import 'package:app/features/settlements/presentation/screens/settlement_history_screen.dart';
 import 'package:app/features/shell/main_shell.dart';
+import 'package:app_links/app_links.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+// ─── Custom page with iOS swipe-back support ────────────────────────────────
 
-  return GoRouter(
+/// A [Page] that uses a slide-from-right + fade transition and preserves the
+/// iOS interactive pop gesture (swipe from left edge to go back).
+class _SlidePage<T> extends Page<T> {
+  const _SlidePage({required this.child, super.key, super.name});
+
+  final Widget child;
+
+  @override
+  Route<T> createRoute(BuildContext context) =>
+      _SlidePageRoute<T>(settings: this, child: child);
+}
+
+class _SlidePageRoute<T> extends PageRoute<T>
+    with CupertinoRouteTransitionMixin<T> {
+  _SlidePageRoute({required super.settings, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget buildContent(BuildContext context) => child;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  String? get title => null;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 300);
+}
+
+_SlidePage<void> _slidePage(GoRouterState state, Widget child) =>
+    _SlidePage<void>(key: state.pageKey, child: child);
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  // Track auth state without rebuilding the Provider on every change.
+  // ValueNotifier acts as refreshListenable so GoRouter re-runs redirect.
+  bool isLoggedIn = ref.read(authStateProvider).valueOrNull != null;
+  final ticker = ValueNotifier<int>(0);
+
+  ref.listen(authStateProvider, (_, next) {
+    isLoggedIn = next.valueOrNull != null;
+    ticker.value++;
+  });
+
+  final router = GoRouter(
     initialLocation: '/dashboard',
+    refreshListenable: ticker,
     redirect: (context, state) {
-      final isLoggedIn = authState.valueOrNull != null;
+      // ── Deep link from iOS widget ─────────────────────────────────────────
+      // iOS delivers the full custom-scheme URL to go_router's route info
+      // provider. Without this branch go_router throws "no routes for
+      // location: com.raycat.okaerisplit://add-expense?groupId=...".
+      if (state.uri.scheme == 'com.raycat.okaerisplit') {
+        if (!isLoggedIn) return '/login';
+        if (state.uri.host == 'add-expense') {
+          final gid = state.uri.queryParameters['groupId'];
+          if (gid != null && gid.isNotEmpty) {
+            return '/groups/$gid/add-expense';
+          }
+        }
+        return '/dashboard';
+      }
+
+      // ── Normal auth redirect ──────────────────────────────────────────────
       final isAuthRoute =
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
@@ -54,32 +116,46 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'create',
-                    builder: (_, _) => const CreateGroupScreen(),
+                    pageBuilder: (_, state) =>
+                        _slidePage(state, const CreateGroupScreen()),
                   ),
                   GoRoute(
                     path: ':groupId',
-                    builder: (_, state) => GroupDetailScreen(
-                      groupId: state.pathParameters['groupId']!,
+                    pageBuilder: (_, state) => _slidePage(
+                      state,
+                      GroupDetailScreen(
+                        groupId: state.pathParameters['groupId']!,
+                      ),
                     ),
                     routes: [
                       GoRoute(
                         path: 'expenses',
-                        builder: (_, state) => ExpenseListScreen(
-                          groupId: state.pathParameters['groupId']!,
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          ExpenseListScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
                         ),
                         routes: [
                           GoRoute(
                             path: ':expenseId',
-                            builder: (_, state) => ExpenseDetailScreen(
-                              groupId: state.pathParameters['groupId']!,
-                              expenseId: state.pathParameters['expenseId']!,
+                            pageBuilder: (_, state) => _slidePage(
+                              state,
+                              ExpenseDetailScreen(
+                                groupId: state.pathParameters['groupId']!,
+                                expenseId: state.pathParameters['expenseId']!,
+                              ),
                             ),
                             routes: [
                               GoRoute(
                                 path: 'edit',
-                                builder: (_, state) => AddExpenseScreen(
-                                  groupId: state.pathParameters['groupId']!,
-                                  expenseId: state.pathParameters['expenseId'],
+                                pageBuilder: (_, state) => _slidePage(
+                                  state,
+                                  AddExpenseScreen(
+                                    groupId: state.pathParameters['groupId']!,
+                                    expenseId:
+                                        state.pathParameters['expenseId'],
+                                  ),
                                 ),
                               ),
                             ],
@@ -88,26 +164,38 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       ),
                       GoRoute(
                         path: 'add-expense',
-                        builder: (_, state) => AddExpenseScreen(
-                          groupId: state.pathParameters['groupId']!,
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          AddExpenseScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
                         ),
                       ),
                       GoRoute(
                         path: 'balances',
-                        builder: (_, state) => BalanceScreen(
-                          groupId: state.pathParameters['groupId']!,
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          BalanceScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
                         ),
                       ),
                       GoRoute(
                         path: 'settlements',
-                        builder: (_, state) => SettlementHistoryScreen(
-                          groupId: state.pathParameters['groupId']!,
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          SettlementHistoryScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
                         ),
                       ),
                       GoRoute(
                         path: 'stats',
-                        builder: (_, state) => ExpenseStatsScreen(
-                          groupId: state.pathParameters['groupId']!,
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          ExpenseStatsScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
                         ),
                       ),
                     ],
@@ -123,9 +211,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (_, _) => const ProfileScreen(),
               ),
             ],
-          ),
+          ), // profile uses default builder (root tab, no slide)
         ],
       ),
     ],
   );
+
+  // Fallback listener for warm-start deep links (app in background).
+  // On warm start iOS may deliver the URL only through app_links, not through
+  // go_router's routeInformationProvider, so both paths are needed.
+  final sub = AppLinks().uriLinkStream.listen((uri) {
+    if (uri.host == 'add-expense') {
+      final gid = uri.queryParameters['groupId'];
+      if (gid != null && gid.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          router.go('/groups/$gid/add-expense');
+        });
+      }
+    }
+  });
+
+  ref.onDispose(() {
+    sub.cancel();
+    ticker.dispose();
+    router.dispose();
+  });
+
+  return router;
 });

@@ -1,3 +1,4 @@
+import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/features/auth/domain/entities/user_entity.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/data/datasources/supabase_profile_datasource.dart';
@@ -31,10 +32,15 @@ final profileProvider = FutureProvider<UserEntity>((ref) async {
   final currentUser = ref.watch(authStateProvider).valueOrNull;
   if (currentUser == null) throw Exception('未登入');
 
+  // Offline: Supabase auth session is locally cached — use it as fallback.
+  final isOnline = ref.watch(isOnlineProvider);
+  if (!isOnline) return currentUser;
+
   final getProfile = ref.watch(getProfileUseCaseProvider);
   final result = await getProfile(currentUser.id);
   return result.fold(
-    (failure) => throw Exception(failure.message),
+    // On network error fall back to the locally-cached auth user.
+    (failure) => currentUser,
     (profile) => profile,
   );
 });

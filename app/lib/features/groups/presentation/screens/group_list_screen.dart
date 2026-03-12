@@ -1,5 +1,8 @@
 import 'package:app/core/widgets/app_error_widget.dart';
-import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/widgets/empty_state_widget.dart';
+import 'package:app/core/widgets/expandable_fab.dart';
+import 'package:app/core/widgets/skeleton_box.dart';
+import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/groups/presentation/widgets/group_card.dart';
 import 'package:app/features/groups/presentation/widgets/join_group_dialog.dart';
@@ -16,74 +19,64 @@ class GroupListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('群組')),
-      body: groupsAsync.when(
-        loading: () => const AppLoadingWidget(),
-        error: (error, _) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(groupsProvider),
-        ),
-        data: (groups) {
-          if (groups.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.group_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text('還沒有群組', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    '建立或加入一個群組開始分帳吧',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: groupsAsync.when(
+              loading: () => const GroupListSkeleton(),
+              error: (error, _) => AppErrorWidget(
+                message: error.toString(),
+                onRetry: () => ref.invalidate(groupsProvider),
               ),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(groupsProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: groups.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final group = groups[index];
-                return GroupCard(
-                  group: group,
-                  onTap: () => context.push('/groups/${group.id}'),
+              data: (groups) {
+                if (groups.isEmpty) {
+                  return EmptyStateWidget(
+                    icon: Icons.group_outlined,
+                    title: '還沒有群組',
+                    subtitle: '建立或加入一個群組開始分帳吧',
+                    action: FilledButton.tonal(
+                      onPressed: () => context.push('/groups/create'),
+                      child: const Text('建立群組'),
+                    ),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(groupsProvider),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: groups.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final group = groups[index];
+                      return GroupCard(
+                        group: group,
+                        onTap: () => context.push('/groups/${group.id}'),
+                      );
+                    },
+                  ),
                 );
               },
             ),
-          );
-        },
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            heroTag: 'join',
-            onPressed: () {
-              showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                useSafeArea: true,
-                builder: (_) => const JoinGroupDialog(),
-              );
-            },
-            child: const Icon(Icons.group_add_outlined),
           ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'create',
+        ],
+      ),
+      floatingActionButton: ExpandableFab(
+        children: [
+          ExpandableFabChild(
+            icon: Icons.group_add_outlined,
+            label: '加入群組',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (_) => const JoinGroupDialog(),
+            ),
+          ),
+          ExpandableFabChild(
+            icon: Icons.add,
+            label: '建立群組',
             onPressed: () => context.push('/groups/create'),
-            child: const Icon(Icons.add),
           ),
         ],
       ),
