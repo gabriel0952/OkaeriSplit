@@ -40,10 +40,11 @@
 
 | 操作 | 策略 | 說明 |
 |------|------|------|
-| 寫入 | Remote-first | 直接寫入 Supabase，失敗時回傳錯誤提示 |
-| 讀取 | Remote-first | 直接從 Supabase 讀取，透過 Riverpod 快取 |
+| 寫入（有網路） | Remote-first | 直接寫入 Supabase，失敗時回傳錯誤提示 |
+| 寫入（無網路） | Local-first | 存入 Hive `pending_expenses`，網路恢復後 SyncService 自動上傳 |
+| 讀取（有網路） | Remote + 寫 Cache | 從 Supabase 讀取，同時更新 Hive cache |
+| 讀取（無網路） | Cache-first | 讀取 Hive cache；無快取則回傳空列表並提示離線 |
 | 即時更新 | Supabase Realtime | 訂閱群組相關表格變更，自動 invalidate Provider |
-| 離線 | 待實作（M9） | Hive 快取群組/消費；無網路可瀏覽快取 & 新增消費（pending queue），網路恢復後自動同步 |
 
 ---
 
@@ -932,7 +933,7 @@ final groupRealtimeProvider = StreamProvider.family<void, String>(
 
 ---
 
-## 7. MVP 功能與技術對照
+## 7. 功能與技術對照
 
 | 功能 | DB 表格 | API 方法 | Feature 模組 |
 |------|---------|----------|-------------|
@@ -947,6 +948,10 @@ final groupRealtimeProvider = StreamProvider.family<void, String>(
 | 手動標記已付款 | settlements | Client SDK | settlements |
 | Dashboard | — (計算) | RPC: get_overall_balances | dashboard |
 | 消費統計 | expenses | Client SDK (aggregate) | expenses |
+| 離線新增消費 | Hive pending_expenses | PendingExpenseRepository | expenses |
+| 離線快取瀏覽 | Hive groups/expenses cache | HiveGroupDataSource, HiveExpenseDataSource | groups, expenses |
+| 自動同步 | — | SyncService.flush() | core/services |
+| iOS Home Widget | App Group UserDefaults | HomeWidgetService | core/services |
 
 ---
 

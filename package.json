@@ -1,5 +1,6 @@
 {
   "devDependencies": {
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "@supabase/supabase-js": "^2.49.4"
   }
 }

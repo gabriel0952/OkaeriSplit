@@ -3,6 +3,7 @@ import 'package:app/features/auth/data/datasources/supabase_auth_datasource.dart
 import 'package:app/features/auth/domain/entities/user_entity.dart';
 import 'package:app/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
@@ -51,6 +52,12 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<AppResult<void>> signOut() async {
     try {
       await _dataSource.signOut();
+      await Future.wait([
+        Hive.box('groups_cache').clear(),
+        Hive.box('expenses_cache').clear(),
+        Hive.box('group_members_cache').clear(),
+        Hive.box('pending_expenses').clear(),
+      ]);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
