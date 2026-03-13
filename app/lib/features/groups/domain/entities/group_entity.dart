@@ -9,6 +9,7 @@ class GroupEntity {
     required this.inviteCode,
     required this.createdBy,
     required this.createdAt,
+    this.status = 'active',
   });
 
   final String id;
@@ -18,6 +19,9 @@ class GroupEntity {
   final String inviteCode;
   final String createdBy;
   final DateTime createdAt;
+  final String status;
+
+  bool get isArchived => status == 'archived';
 }
 
 class GroupMemberEntity {

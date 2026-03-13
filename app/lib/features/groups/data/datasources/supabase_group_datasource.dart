@@ -124,6 +124,7 @@ class SupabaseGroupDataSource {
       inviteCode: data['invite_code'] as String? ?? '',
       createdBy: data['created_by'] as String,
       createdAt: DateTime.parse(data['created_at'] as String),
+      status: data['status'] as String? ?? 'active',
     );
   }
 }

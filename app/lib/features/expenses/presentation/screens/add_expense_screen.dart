@@ -161,6 +161,30 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
     }
 
+    // 6.2: Block access for archived groups
+    final isArchived = groupAsync.valueOrNull?.isArchived ?? false;
+    if (isArchived) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.isEditing ? '編輯消費' : '新增消費')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.archive_outlined, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  '此群組已封存，無法新增或編輯消費',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.isEditing ? '編輯消費' : '新增消費')),
       body: membersAsync.when(

@@ -10,11 +10,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class GroupListScreen extends ConsumerWidget {
+class GroupListScreen extends ConsumerStatefulWidget {
   const GroupListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GroupListScreen> createState() => _GroupListScreenState();
+}
+
+class _GroupListScreenState extends ConsumerState<GroupListScreen> {
+  bool _archivedExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final groupsAsync = ref.watch(groupsProvider);
 
     return Scaffold(
@@ -30,7 +37,10 @@ class GroupListScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(groupsProvider),
               ),
               data: (groups) {
-                if (groups.isEmpty) {
+                final active = groups.where((g) => !g.isArchived).toList();
+                final archived = groups.where((g) => g.isArchived).toList();
+
+                if (active.isEmpty && archived.isEmpty) {
                   return EmptyStateWidget(
                     icon: Icons.group_outlined,
                     title: '還沒有群組',
@@ -41,19 +51,80 @@ class GroupListScreen extends ConsumerWidget {
                     ),
                   );
                 }
+
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(groupsProvider),
-                  child: ListView.separated(
+                  child: ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: groups.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final group = groups[index];
-                      return GroupCard(
-                        group: group,
-                        onTap: () => context.push('/groups/${group.id}'),
-                      );
-                    },
+                    children: [
+                      // Active groups
+                      if (active.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              '沒有進行中的群組',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            ),
+                          ),
+                        )
+                      else
+                        ...active.map((group) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: GroupCard(
+                            group: group,
+                            onTap: () => context.push('/groups/${group.id}'),
+                          ),
+                        )),
+
+                      // Archived section
+                      if (archived.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () => setState(() => _archivedExpanded = !_archivedExpanded),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.archive_outlined,
+                                  size: 18,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '已結束（${archived.length}）',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Icon(
+                                  _archivedExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_archivedExpanded)
+                          ...archived.map((group) => Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Opacity(
+                              opacity: 0.6,
+                              child: GroupCard(
+                                group: group,
+                                onTap: () => context.push('/groups/${group.id}'),
+                              ),
+                            ),
+                          )),
+                      ],
+                    ],
                   ),
                 );
               },

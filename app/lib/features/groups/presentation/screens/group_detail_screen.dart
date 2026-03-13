@@ -53,6 +53,22 @@ class GroupDetailScreen extends ConsumerWidget {
                 avatar: const Icon(Icons.visibility_outlined, size: 14),
               ),
             ),
+          // Archived badge (shown in AppBar before group data loads via groupAsync)
+          if (!isGuest)
+            groupAsync.whenOrNull(
+              data: (group) => group.isArchived
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Chip(
+                        label: const Text('已封存'),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.archive_outlined, size: 14),
+                      ),
+                    )
+                  : null,
+            ) ?? const SizedBox.shrink(),
         ],
       ),
       body: Column(
@@ -243,7 +259,8 @@ class GroupDetailScreen extends ConsumerWidget {
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  if (!isGuest) ...[
+                  // 6.3: Hide member add buttons for guests and archived groups
+                  if (!isGuest && !group.isArchived) ...[
                     TextButton.icon(
                       onPressed: () {
                         showModalBottomSheet<void>(
@@ -333,8 +350,34 @@ class GroupDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Leave / Delete group button (hidden for guests)
-              if (!isGuest)
+              // 5.2: Reopen button (owner only, archived groups)
+              if (!isGuest && isOwner && group.isArchived) ...[
+                OutlinedButton.icon(
+                  onPressed: () => _handleReopenGroup(context, ref),
+                  icon: const Icon(Icons.unarchive_outlined),
+                  label: const Text('重新開啟群組'),
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // 5.1: Archive button (owner only, active groups)
+              if (!isGuest && isOwner && !group.isArchived) ...[
+                Builder(builder: (context) {
+                  final balancesAsync = ref.watch(balancesProvider(groupId));
+                  final unsettled = balancesAsync.valueOrNull?.fold<double>(
+                        0, (sum, b) => sum + (b.netBalance > 0 ? b.netBalance : 0),
+                      ) ?? 0;
+                  return OutlinedButton.icon(
+                    onPressed: () => _handleArchiveGroup(context, ref, unsettled),
+                    icon: const Icon(Icons.archive_outlined),
+                    label: const Text('封存群組'),
+                  );
+                }),
+                const SizedBox(height: 8),
+              ],
+
+              // Leave / Delete group button (hidden for guests and archived groups)
+              if (!isGuest && !group.isArchived)
                 if (isOwner)
                   OutlinedButton.icon(
                     onPressed: () => _handleDeleteGroup(context, ref),
@@ -452,5 +495,113 @@ class GroupDetailScreen extends ConsumerWidget {
         context.go('/groups');
       },
     );
+  }
+
+  Future<void> _handleArchiveGroup(
+    BuildContext context,
+    WidgetRef ref,
+    double unsettled,
+  ) async {
+    // If there are unsettled amounts, warn first
+    if (unsettled > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('仍有未結清欠款'),
+          content: Text(
+            '目前群組還有 ${unsettled.toStringAsFixed(0)} 元未結清。\n封存後群組將變為唯讀，無法繼續記帳或結算。\n\n確定仍要封存？',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('仍要封存'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('封存群組'),
+          content: const Text('封存後群組將變為唯讀，所有成員無法繼續記帳。訪客帳號將被刪除。\n\n可隨時重新開啟群組。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('封存'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+
+    try {
+      final supabase = ref.read(supabaseClientProvider);
+      await supabase.functions.invoke(
+        'archive_group',
+        body: {'group_id': groupId},
+      );
+      if (!context.mounted) return;
+      ref.invalidate(groupDetailProvider(groupId));
+      ref.invalidate(groupsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('群組已封存')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('封存失敗：$e')),
+      );
+    }
+  }
+
+  Future<void> _handleReopenGroup(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重新開啟群組'),
+        content: const Text('重新開啟後，所有成員可以繼續記帳與結算。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('重新開啟'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      final supabase = ref.read(supabaseClientProvider);
+      await supabase.rpc('reopen_group', params: {'p_group_id': groupId});
+      if (!context.mounted) return;
+      ref.invalidate(groupDetailProvider(groupId));
+      ref.invalidate(groupsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('群組已重新開啟')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失敗：$e')),
+      );
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/core/services/home_widget_service.dart';
 import 'package:app/core/theme/app_theme.dart';
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/routing/app_router.dart';
@@ -74,7 +75,28 @@ class _OkaeriSplitAppState extends ConsumerState<OkaeriSplitApp>
       if (isOnline) {
         ref.read(syncServiceProvider).flush();
       }
+      // If current user is a guest, validate session against server.
+      // admin.deleteUser() invalidates the refresh token immediately.
+      // refreshSession() will fail with AuthException → force local sign-out
+      // → SIGNED_OUT event → router redirects to /login.
+      final isGuest = ref.read(isGuestProvider);
+      if (isGuest && isOnline) {
+        _checkGuestSession();
+      }
     }
+  }
+
+  Future<void> _checkGuestSession() async {
+    try {
+      await Supabase.instance.client.auth.refreshSession();
+    } on AuthException catch (_) {
+      // Refresh token rejected — account was deleted. Sign out locally so
+      // SIGNED_OUT is emitted and the router redirects to /login.
+      await Supabase.instance.client.auth.signOut(
+        scope: SignOutScope.local,
+      );
+    }
+    // Other exceptions (e.g. network) are ignored — don't sign out offline users.
   }
 
   @override

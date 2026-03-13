@@ -63,7 +63,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   bool isGuest = ref.read(authStateProvider).valueOrNull?.isGuest ?? false;
   final ticker = ValueNotifier<int>(0);
 
-  ref.listen(authStateProvider, (_, next) {
+  ref.listen(authStateProvider, (prev, next) {
+    final wasGuest = prev?.valueOrNull?.isGuest ?? false;
+    final signedOut = next.valueOrNull == null;
+    if (wasGuest && signedOut) {
+      Hive.box('groups_cache').delete('guest_group_id');
+    }
     isLoggedIn = next.valueOrNull != null;
     isGuest = next.valueOrNull?.isGuest ?? false;
     ticker.value++;
