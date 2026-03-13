@@ -139,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ],
                   const SizedBox(height: 24),
-                  ElevatedButton(
+                  FilledButton(
                     onPressed: _isLoading ? null : _handleSignIn,
                     child: _isLoading
                         ? const SizedBox(
@@ -149,10 +149,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           )
                         : const Text('登入'),
                   ),
-                  const SizedBox(height: 12),
-                  TextButton(
+                  const SizedBox(height: 8),
+                  OutlinedButton(
                     onPressed: () => context.go('/register'),
                     child: const Text('還沒有帳號？註冊'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () => context.push('/guest-login'),
+                    icon: const Icon(Icons.person_outline, size: 18),
+                    label: const Text('以訪客身份進入'),
                   ),
                   const SizedBox(height: 24),
                   const Row(

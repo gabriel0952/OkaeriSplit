@@ -6,6 +6,7 @@ import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
+import 'package:app/features/groups/presentation/widgets/add_guest_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/invite_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/member_avatar.dart';
 import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
@@ -30,9 +31,30 @@ class GroupDetailScreen extends ConsumerWidget {
     final groupAsync = ref.watch(groupDetailProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
+    final isGuest = ref.watch(isGuestProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('群組詳情')),
+    return PopScope(
+      // Guests cannot pop back to the group list
+      canPop: !isGuest,
+      child: Scaffold(
+      appBar: AppBar(
+        // Hide the back button for guests (nothing useful to go back to)
+        automaticallyImplyLeading: !isGuest,
+        title: const Text('群組詳情'),
+        actions: [
+          if (isGuest)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Chip(
+                label: const Text('唯讀'),
+                labelStyle: const TextStyle(fontSize: 12),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.visibility_outlined, size: 14),
+              ),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           const OfflineBanner(),
@@ -221,25 +243,41 @@ class GroupDetailScreen extends ConsumerWidget {
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  TextButton.icon(
-                    onPressed: () {
-                      final memberIds = membersAsync.valueOrNull
-                              ?.map((m) => m.userId)
-                              .toSet() ??
-                          {};
-                      showModalBottomSheet<bool>(
-                        context: context,
-                        isScrollControlled: true,
-                        useSafeArea: true,
-                        builder: (_) => InviteMemberDialog(
-                          groupId: groupId,
-                          existingMemberIds: memberIds,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.person_add, size: 18),
-                    label: const Text('邀請'),
-                  ),
+                  if (!isGuest) ...[
+                    TextButton.icon(
+                      onPressed: () {
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          builder: (_) => AddGuestMemberDialog(
+                            groupId: groupId,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.person_outline, size: 18),
+                      label: const Text('訪客'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        final memberIds = membersAsync.valueOrNull
+                                ?.map((m) => m.userId)
+                                .toSet() ??
+                            {};
+                        showModalBottomSheet<bool>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          builder: (_) => InviteMemberDialog(
+                            groupId: groupId,
+                            existingMemberIds: memberIds,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('邀請'),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 8),
@@ -295,31 +333,32 @@ class GroupDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Leave / Delete group button
-              if (isOwner)
-                OutlinedButton.icon(
-                  onPressed: () => _handleDeleteGroup(context, ref),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.error,
+              // Leave / Delete group button (hidden for guests)
+              if (!isGuest)
+                if (isOwner)
+                  OutlinedButton.icon(
+                    onPressed: () => _handleDeleteGroup(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
-                  ),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('刪除群組'),
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: () => _handleLeaveGroup(context, ref),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.error,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('刪除群組'),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: () => _handleLeaveGroup(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
+                    icon: const Icon(Icons.exit_to_app),
+                    label: const Text('退出群組'),
                   ),
-                  icon: const Icon(Icons.exit_to_app),
-                  label: const Text('退出群組'),
-                ),
             ],
           );
         },
@@ -327,7 +366,8 @@ class GroupDetailScreen extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   Future<void> _handleDeleteGroup(BuildContext context, WidgetRef ref) async {

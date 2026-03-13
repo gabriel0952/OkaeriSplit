@@ -1,14 +1,34 @@
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isGuest = ref.watch(isGuestProvider);
+
+    void onDestinationSelected(int index) {
+      // Guests are locked to the groups branch (index 1)
+      if (isGuest && index != 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('訪客模式無法使用此功能'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      navigationShell.goBranch(
+        index,
+        initialLocation: index == navigationShell.currentIndex,
+      );
+    }
 
     // Task 2.1: 0.5px top border instead of default shadow/elevation
     return Scaffold(
@@ -26,12 +46,7 @@ class MainShell extends StatelessWidget {
         ),
         child: NavigationBar(
           selectedIndex: navigationShell.currentIndex,
-          onDestinationSelected: (index) {
-            navigationShell.goBranch(
-              index,
-              initialLocation: index == navigationShell.currentIndex,
-            );
-          },
+          onDestinationSelected: onDestinationSelected,
           // Task 2.1: rounded icon variants
           destinations: const [
             NavigationDestination(

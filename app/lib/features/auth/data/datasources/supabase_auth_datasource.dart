@@ -103,6 +103,7 @@ class SupabaseAuthDataSource {
           user.email?.split('@').first ??
           '',
       avatarUrl: user.userMetadata?['avatar_url'] as String?,
+      isGuest: user.userMetadata?['is_guest'] as bool? ?? false,
     );
   }
 

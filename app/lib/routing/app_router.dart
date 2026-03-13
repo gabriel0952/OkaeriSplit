@@ -1,4 +1,5 @@
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/auth/presentation/screens/guest_login_screen.dart';
 import 'package:app/features/auth/presentation/screens/login_screen.dart';
 import 'package:app/features/auth/presentation/screens/register_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -15,6 +16,7 @@ import 'package:app/features/settlements/presentation/screens/settlement_history
 import 'package:app/features/shell/main_shell.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -58,10 +60,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   // Track auth state without rebuilding the Provider on every change.
   // ValueNotifier acts as refreshListenable so GoRouter re-runs redirect.
   bool isLoggedIn = ref.read(authStateProvider).valueOrNull != null;
+  bool isGuest = ref.read(authStateProvider).valueOrNull?.isGuest ?? false;
   final ticker = ValueNotifier<int>(0);
 
   ref.listen(authStateProvider, (_, next) {
     isLoggedIn = next.valueOrNull != null;
+    isGuest = next.valueOrNull?.isGuest ?? false;
     ticker.value++;
   });
 
@@ -87,15 +91,30 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Normal auth redirect ──────────────────────────────────────────────
       final isAuthRoute =
           state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register';
+          state.matchedLocation == '/register' ||
+          state.matchedLocation == '/guest-login';
 
       if (!isLoggedIn && !isAuthRoute) return '/login';
+      // Guests should not access the main shell (dashboard/groups list/profile)
+      if (isLoggedIn && isGuest) {
+        final loc = state.matchedLocation;
+        final isShellRoot =
+            loc == '/dashboard' || loc == '/groups' || loc == '/profile';
+        if (isAuthRoute || isShellRoot) {
+          // Redirect to persisted group, fall back to login
+          final gid = Hive.box('groups_cache').get('guest_group_id') as String?;
+          if (gid != null) return '/groups/$gid';
+          return '/login';
+        }
+        return null;
+      }
       if (isLoggedIn && isAuthRoute) return '/dashboard';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
+      GoRoute(path: '/guest-login', builder: (_, _) => const GuestLoginScreen()),
       StatefulShellRoute.indexedStack(
         builder: (_, _, navigationShell) =>
             MainShell(navigationShell: navigationShell),

@@ -9,6 +9,7 @@ import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/expense_card.dart';
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -410,6 +411,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
     final membersAsync = ref.watch(groupMembersProvider(groupId));
 
     final pendingCount = ref.watch(pendingCountProvider);
+    final isGuest = ref.watch(isGuestProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -454,10 +456,12 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/groups/$groupId/add-expense'),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isGuest
+          ? null
+          : FloatingActionButton(
+              onPressed: () => context.push('/groups/$groupId/add-expense'),
+              child: const Icon(Icons.add),
+            ),
       body: Column(
         children: [
           const OfflineBanner(),

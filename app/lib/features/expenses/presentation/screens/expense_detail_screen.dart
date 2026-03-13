@@ -38,6 +38,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
     final expenseAsync = ref.watch(expenseDetailLiveProvider(liveKey));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
+    final isGuest = ref.watch(isGuestProvider);
     final customCategories =
         ref.watch(groupCategoriesProvider(groupId)).valueOrNull ?? [];
 
@@ -185,8 +186,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Edit button: all group members can edit
-              if (isMember) ...[
+              // Edit/Delete buttons hidden for guests
+              if (isMember && !isGuest) ...[
                 FilledButton.icon(
                   onPressed: () =>
                       context.push('/groups/$groupId/expenses/$expenseId/edit'),
@@ -196,8 +197,8 @@ class ExpenseDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
               ],
 
-              // Delete button: only paidBy
-              if (isOwner)
+              // Delete button: only paidBy, not guests
+              if (isOwner && !isGuest)
                 OutlinedButton.icon(
                   onPressed: () => _handleDelete(context, ref),
                   style: OutlinedButton.styleFrom(

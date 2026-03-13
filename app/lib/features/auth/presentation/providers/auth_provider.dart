@@ -50,6 +50,11 @@ final authStateProvider = StreamProvider<UserEntity?>((ref) {
   return repository.authStateChanges();
 });
 
+// Guest state
+final isGuestProvider = Provider<bool>((ref) {
+  return ref.watch(authStateProvider).valueOrNull?.isGuest ?? false;
+});
+
 // Sign-in action
 final signInActionProvider =
     FutureProvider.family<UserEntity, ({String email, String password})>((

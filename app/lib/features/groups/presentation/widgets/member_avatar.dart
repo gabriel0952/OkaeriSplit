@@ -25,19 +25,36 @@ class MemberAvatar extends StatelessWidget {
             : null,
       ),
       title: Text(member.displayName),
-      trailing: isOwner
+      trailing: member.isGuest
           ? Chip(
               label: Text(
-                '管理員',
+                '訪客',
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer,
+                  color: theme.colorScheme.onSecondaryContainer,
                 ),
               ),
-              backgroundColor: theme.colorScheme.primaryContainer,
+              avatar: Icon(
+                Icons.person_outline,
+                size: 14,
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+              backgroundColor: theme.colorScheme.secondaryContainer,
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             )
-          : null,
+          : isOwner
+              ? Chip(
+                  label: Text(
+                    '管理員',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                )
+              : null,
     );
   }
 }

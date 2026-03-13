@@ -31,6 +31,7 @@ class BalanceScreen extends ConsumerWidget {
     final balancesAsync = ref.watch(balancesProvider(groupId));
     final groupAsync = ref.watch(groupDetailProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
+    final isGuest = ref.watch(isGuestProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -105,12 +106,14 @@ class BalanceScreen extends ConsumerWidget {
                               debt: debt,
                               currency: currency,
                               isFromCurrentUser: isFromCurrentUser,
-                              onPay: () => _handlePay(
-                                context,
-                                ref,
-                                debt,
-                                currency,
-                              ),
+                              onPay: isGuest
+                                  ? null
+                                  : () => _handlePay(
+                                        context,
+                                        ref,
+                                        debt,
+                                        currency,
+                                      ),
                             );
                           }).toList(),
                         ),

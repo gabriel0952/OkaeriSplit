@@ -5,6 +5,7 @@ class UserEntity {
     required this.displayName,
     this.avatarUrl,
     this.defaultCurrency = 'TWD',
+    this.isGuest = false,
   });
 
   final String id;
@@ -12,4 +13,5 @@ class UserEntity {
   final String displayName;
   final String? avatarUrl;
   final String defaultCurrency;
+  final bool isGuest;
 }

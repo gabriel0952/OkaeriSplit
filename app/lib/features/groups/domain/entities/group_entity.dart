@@ -28,6 +28,7 @@ class GroupMemberEntity {
     this.avatarUrl,
     required this.role,
     required this.joinedAt,
+    this.isGuest = false,
   });
 
   final String groupId;
@@ -36,4 +37,5 @@ class GroupMemberEntity {
   final String? avatarUrl;
   final String role;
   final DateTime joinedAt;
+  final bool isGuest;
 }

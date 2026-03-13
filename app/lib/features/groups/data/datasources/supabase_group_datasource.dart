@@ -62,7 +62,7 @@ class SupabaseGroupDataSource {
   Future<List<GroupMemberEntity>> getGroupMembers(String groupId) async {
     final response = await _client
         .from('group_members')
-        .select('*, profiles(*)')
+        .select('*, profiles(id, display_name, email, avatar_url, is_guest)')
         .eq('group_id', groupId);
 
     return (response as List).map((row) {
@@ -77,6 +77,7 @@ class SupabaseGroupDataSource {
         avatarUrl: profile?['avatar_url'] as String?,
         role: row['role'] as String? ?? 'member',
         joinedAt: DateTime.parse(row['joined_at'] as String),
+        isGuest: profile?['is_guest'] as bool? ?? false,
       );
     }).toList();
   }
@@ -88,6 +89,7 @@ class SupabaseGroupDataSource {
         .select('id, email, display_name, avatar_url')
         .or('email.ilike.%$query%,display_name.ilike.%$query%')
         .neq('id', currentUserId)
+        .eq('is_guest', false)
         .limit(20);
 
     return (response as List).cast<Map<String, dynamic>>();
