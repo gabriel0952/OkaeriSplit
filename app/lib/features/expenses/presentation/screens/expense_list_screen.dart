@@ -479,10 +479,24 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
         ),
         data: (expenses) {
           if (expenses.isEmpty) {
-            return const EmptyStateWidget(
-              icon: Icons.receipt_long_outlined,
-              title: '尚無消費紀錄',
-              subtitle: '點擊 + 新增第一筆消費',
+            return RefreshIndicator(
+              onRefresh: () async {
+                if (ref.read(isOnlineProvider)) {
+                  await ref.read(syncServiceProvider).flush();
+                }
+                ref.invalidate(expensesProvider(groupId));
+              },
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 120),
+                  EmptyStateWidget(
+                    icon: Icons.receipt_long_outlined,
+                    title: '尚無消費紀錄',
+                    subtitle: '點擊 + 新增第一筆消費',
+                  ),
+                ],
+              ),
             );
           }
 
@@ -557,36 +571,31 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                 // Content
                 Expanded(
                   child: filtered.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.search_off,
-                                size: 48,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                '沒有符合條件的消費',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyLarge
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextButton(
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 80),
+                            Icon(
+                              Icons.search_off,
+                              size: 48,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '沒有符合條件的消費',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Center(
+                              child: TextButton(
                                 onPressed: _clearFilters,
                                 child: const Text('清除篩選'),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),

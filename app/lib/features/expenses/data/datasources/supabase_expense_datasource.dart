@@ -61,6 +61,7 @@ class SupabaseExpenseDataSource {
 
   Future<void> updateExpense({
     required String expenseId,
+    required String paidBy,
     required double amount,
     required String category,
     required String description,
@@ -72,6 +73,7 @@ class SupabaseExpenseDataSource {
       'update_expense',
       params: {
         'p_expense_id': expenseId,
+        'p_paid_by': paidBy,
         'p_amount': amount,
         'p_category': category,
         'p_description': description,

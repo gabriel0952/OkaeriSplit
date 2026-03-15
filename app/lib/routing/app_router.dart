@@ -1,5 +1,6 @@
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/auth/presentation/screens/guest_login_screen.dart';
+import 'package:app/features/auth/presentation/screens/guest_upgrade_screen.dart';
 import 'package:app/features/auth/presentation/screens/login_screen.dart';
 import 'package:app/features/auth/presentation/screens/register_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -120,6 +121,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
       GoRoute(path: '/guest-login', builder: (_, _) => const GuestLoginScreen()),
+      GoRoute(
+        path: '/guest-upgrade',
+        pageBuilder: (_, state) => _slidePage(state, const GuestUpgradeScreen()),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (_, _, navigationShell) =>
             MainShell(navigationShell: navigationShell),

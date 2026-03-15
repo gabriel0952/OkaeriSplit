@@ -6,6 +6,7 @@ import 'package:app/features/auth/domain/usecases/get_current_user.dart';
 import 'package:app/features/auth/domain/usecases/sign_in.dart';
 import 'package:app/features/auth/domain/usecases/sign_out.dart';
 import 'package:app/features/auth/domain/usecases/delete_account.dart';
+import 'package:app/features/auth/domain/usecases/upgrade_guest_account.dart';
 import 'package:app/features/auth/domain/usecases/sign_up.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,6 +39,10 @@ final signOutUseCaseProvider = Provider<SignOut>((ref) {
 
 final deleteAccountUseCaseProvider = Provider<DeleteAccount>((ref) {
   return DeleteAccount(ref.watch(authRepositoryProvider));
+});
+
+final upgradeGuestAccountUseCaseProvider = Provider<UpgradeGuestAccount>((ref) {
+  return UpgradeGuestAccount(ref.watch(authRepositoryProvider));
 });
 
 final getCurrentUserUseCaseProvider = Provider<GetCurrentUser>((ref) {

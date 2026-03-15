@@ -20,6 +20,7 @@ abstract class ExpenseRepository {
 
   Future<AppResult<void>> updateExpense({
     required String expenseId,
+    required String paidBy,
     required double amount,
     required String category,
     required String description,

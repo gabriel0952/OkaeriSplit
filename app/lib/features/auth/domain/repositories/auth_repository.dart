@@ -15,6 +15,12 @@ abstract class AuthRepository {
 
   Future<AppResult<void>> signOut();
 
+  Future<AppResult<UserEntity>> upgradeGuestAccount({
+    required String email,
+    required String password,
+    required String displayName,
+  });
+
   Future<AppResult<void>> deleteAccount();
 
   Future<AppResult<UserEntity?>> getCurrentUser();

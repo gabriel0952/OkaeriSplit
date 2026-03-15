@@ -49,6 +49,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   String? _selectedCurrency;
   final Map<String, TextEditingController> _ratioControllers = {};
   final Map<String, TextEditingController> _fixedAmountControllers = {};
+  final Map<String, FocusNode> _fixedAmountFocusNodes = {};
 
   // Attachments
   final List<File> _newAttachments = [];
@@ -79,6 +80,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     for (final c in _fixedAmountControllers.values) {
       c.dispose();
     }
+    for (final n in _fixedAmountFocusNodes.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -92,6 +96,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         member.userId,
         () => TextEditingController(),
       );
+      _fixedAmountFocusNodes.putIfAbsent(member.userId, () {
+        final node = FocusNode();
+        node.addListener(() {
+          if (!node.hasFocus) _autoFillLastFixedAmount();
+        });
+        return node;
+      });
     }
   }
 
@@ -912,6 +923,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 width: 120,
                 child: TextField(
                   controller: _fixedAmountControllers[member.userId],
+                  focusNode: _fixedAmountFocusNodes[member.userId],
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.right,
                   style: fieldStyle,
@@ -967,6 +979,34 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ),
       ),
     );
+  }
+
+  void _autoFillLastFixedAmount() {
+    final totalAmount = double.tryParse(_amountController.text) ?? 0;
+    if (totalAmount <= 0) return;
+
+    final emptyIds = _selectedMemberIds
+        .where((id) => (_fixedAmountControllers[id]?.text ?? '').isEmpty)
+        .toList();
+
+    if (emptyIds.length != 1) return;
+
+    // Don't overwrite while the user is actively editing that field
+    if (_fixedAmountFocusNodes[emptyIds.first]?.hasFocus == true) return;
+
+    double filled = 0;
+    for (final id in _selectedMemberIds) {
+      if (id == emptyIds.first) continue;
+      filled += double.tryParse(_fixedAmountControllers[id]?.text ?? '') ?? 0;
+    }
+
+    final remaining = totalAmount - filled;
+    if (remaining <= 0) return;
+
+    _fixedAmountControllers[emptyIds.first]?.text = remaining % 1 == 0
+        ? remaining.toStringAsFixed(0)
+        : remaining.toStringAsFixed(2);
+    setState(() {});
   }
 
   Map<String, double> _getFixedAmountsMap() {
@@ -1458,6 +1498,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       final updateExpense = ref.read(updateExpenseUseCaseProvider);
       final result = await updateExpense(
         expenseId: widget.expenseId!,
+        paidBy: _paidBy!,
         amount: amount,
         category: _category,
         description: description,

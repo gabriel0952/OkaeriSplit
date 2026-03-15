@@ -350,6 +350,22 @@ class GroupDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
+              // Guest actions
+              if (isGuest) ...[
+                FilledButton.icon(
+                  onPressed: () => context.push('/guest-upgrade'),
+                  icon: const Icon(Icons.person_add_outlined),
+                  label: const Text('建立正式帳號'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _handleGuestExit(context, ref),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('退出訪客模式'),
+                ),
+                const SizedBox(height: 8),
+              ],
+
               // 5.2: Reopen button (owner only, archived groups)
               if (!isGuest && isOwner && group.isArchived) ...[
                 OutlinedButton.icon(
@@ -411,6 +427,31 @@ class GroupDetailScreen extends ConsumerWidget {
       ),
     ), // Scaffold
     ); // PopScope
+  }
+
+  Future<void> _handleGuestExit(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('退出訪客模式'),
+        content: const Text('確定要退出訪客模式嗎？\n退出後可以用相同代碼重新進入。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final signOut = ref.read(signOutUseCaseProvider);
+    await signOut();
   }
 
   Future<void> _handleDeleteGroup(BuildContext context, WidgetRef ref) async {

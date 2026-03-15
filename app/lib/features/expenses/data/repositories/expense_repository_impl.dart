@@ -136,6 +136,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   @override
   Future<AppResult<void>> updateExpense({
     required String expenseId,
+    required String paidBy,
     required double amount,
     required String category,
     required String description,
@@ -146,6 +147,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     try {
       await _dataSource.updateExpense(
         expenseId: expenseId,
+        paidBy: paidBy,
         amount: amount,
         category: category,
         description: description,

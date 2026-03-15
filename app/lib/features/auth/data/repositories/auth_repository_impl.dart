@@ -65,6 +65,26 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AppResult<UserEntity>> upgradeGuestAccount({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    try {
+      final user = await _dataSource.upgradeGuestAccount(
+        email: email,
+        password: password,
+        displayName: displayName,
+      );
+      return Right(user);
+    } on AuthException catch (e) {
+      return Left(AuthFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   Future<AppResult<void>> deleteAccount() async {
     try {
       await _dataSource.deleteAccount();

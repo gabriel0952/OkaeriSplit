@@ -7,6 +7,7 @@ class UpdateExpense {
 
   Future<AppResult<void>> call({
     required String expenseId,
+    required String paidBy,
     required double amount,
     required String category,
     required String description,
@@ -16,6 +17,7 @@ class UpdateExpense {
   }) {
     return _repository.updateExpense(
       expenseId: expenseId,
+      paidBy: paidBy,
       amount: amount,
       category: category,
       description: description,

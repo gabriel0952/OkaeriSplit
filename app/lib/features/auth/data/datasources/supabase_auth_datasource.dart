@@ -89,6 +89,34 @@ class SupabaseAuthDataSource {
     );
   }
 
+  Future<UserEntity> upgradeGuestAccount({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final response = await _client.functions.invoke(
+      'upgrade_guest_account',
+      body: {
+        'email': email,
+        'password': password,
+        'display_name': displayName,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>?;
+    if (data?['success'] != true) {
+      final message = data?['error'] as String? ?? '帳號升級失敗';
+      throw AuthException(message);
+    }
+
+    // Sign in with new credentials to obtain a fresh JWT with is_guest: false
+    final authResponse = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+    return _mapUser(authResponse.user!);
+  }
+
   Future<void> deleteAccount() async {
     await _client.rpc('delete_user_account');
     await _client.auth.signOut();
