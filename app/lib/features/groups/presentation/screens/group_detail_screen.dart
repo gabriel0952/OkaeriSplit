@@ -15,7 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/constants/app_constants.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 
 class GroupDetailScreen extends ConsumerStatefulWidget {
   const GroupDetailScreen({super.key, required this.groupId});
@@ -467,7 +467,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       },
       (token) {
         final url = '${AppConstants.shareDomain}/s/$token';
-        SharePlus.instance.share(ShareParams(text: url));
+        Share.share(url);
       },
     );
   }
