@@ -137,4 +137,14 @@ class GroupRepositoryImpl implements GroupRepository {
       return Left(ServerFailure(e.toString()));
     }
   }
+
+  @override
+  Future<AppResult<String>> createShareLink(String groupId) async {
+    try {
+      final token = await _remote.createShareLink(groupId);
+      return Right(token);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
 }

@@ -13,15 +13,25 @@ import 'package:app/features/settlements/presentation/providers/settlement_provi
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/core/constants/app_constants.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
-class GroupDetailScreen extends ConsumerWidget {
+class GroupDetailScreen extends ConsumerStatefulWidget {
   const GroupDetailScreen({super.key, required this.groupId});
 
   final String groupId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GroupDetailScreen> createState() => _GroupDetailScreenState();
+}
+
+class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
+  String get groupId => widget.groupId;
+  bool _isSharing = false;
+
+  @override
+  Widget build(BuildContext context) {
     // Activate realtime subscription for group members (skipped when offline).
     final isOnline = ref.watch(isOnlineProvider);
     if (isOnline) {
@@ -69,6 +79,19 @@ class GroupDetailScreen extends ConsumerWidget {
                     )
                   : null,
             ) ?? const SizedBox.shrink(),
+          // Share button (non-guest only)
+          if (!isGuest)
+            IconButton(
+              icon: _isSharing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.share_outlined),
+              tooltip: '分享群組',
+              onPressed: _isSharing ? null : () => _handleShareLink(context),
+            ),
         ],
       ),
       body: Column(
@@ -427,6 +450,26 @@ class GroupDetailScreen extends ConsumerWidget {
       ),
     ), // Scaffold
     ); // PopScope
+  }
+
+  Future<void> _handleShareLink(BuildContext context) async {
+    setState(() => _isSharing = true);
+    final useCase = ref.read(createShareLinkUseCaseProvider);
+    final result = await useCase(groupId);
+    if (!mounted) return;
+    setState(() => _isSharing = false);
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('分享失敗：${failure.message}')),
+        );
+      },
+      (token) {
+        final url = '${AppConstants.shareDomain}/s/$token';
+        SharePlus.instance.share(ShareParams(text: url));
+      },
+    );
   }
 
   Future<void> _handleGuestExit(BuildContext context, WidgetRef ref) async {

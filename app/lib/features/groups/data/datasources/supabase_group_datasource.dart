@@ -112,6 +112,14 @@ class SupabaseGroupDataSource {
     );
   }
 
+  Future<String> createShareLink(String groupId) async {
+    final response = await _client.rpc(
+      'create_share_link',
+      params: {'p_group_id': groupId},
+    );
+    return response as String;
+  }
+
   GroupEntity _mapGroup(Map<String, dynamic> data) {
     return GroupEntity(
       id: data['id'] as String,

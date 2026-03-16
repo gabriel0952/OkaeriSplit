@@ -12,6 +12,7 @@ import 'package:app/features/groups/domain/usecases/get_group_members.dart';
 import 'package:app/features/groups/domain/usecases/get_groups.dart';
 import 'package:app/features/groups/domain/usecases/join_group_by_code.dart';
 import 'package:app/features/groups/domain/usecases/delete_group.dart';
+import 'package:app/features/groups/domain/usecases/create_share_link.dart';
 import 'package:app/features/groups/domain/usecases/invite_user.dart';
 import 'package:app/features/groups/domain/usecases/leave_group.dart';
 import 'package:app/features/groups/domain/usecases/search_users.dart';
@@ -72,6 +73,10 @@ final searchUsersUseCaseProvider = Provider<SearchUsers>((ref) {
 
 final inviteUserUseCaseProvider = Provider<InviteUser>((ref) {
   return InviteUser(ref.watch(groupRepositoryProvider));
+});
+
+final createShareLinkUseCaseProvider = Provider<CreateShareLink>((ref) {
+  return CreateShareLink(ref.watch(groupRepositoryProvider));
 });
 
 // Presentation providers

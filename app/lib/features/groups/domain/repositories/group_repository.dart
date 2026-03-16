@@ -26,4 +26,6 @@ abstract class GroupRepository {
   });
 
   Future<AppResult<void>> deleteGroup(String groupId);
+
+  Future<AppResult<String>> createShareLink(String groupId);
 }

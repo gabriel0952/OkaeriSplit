@@ -6,6 +6,9 @@ abstract final class AppConstants {
   static const String redirectUrl = 'com.raycat.okaerisplit://login-callback';
   static const String appName = 'OkaeriSplit';
   static const String defaultCurrency = 'TWD';
+
+  // Web share domain — update after Vercel deployment
+  static const String shareDomain = 'https://okaeri-split.vercel.app';
 }
 
 enum ExpenseCategory {
