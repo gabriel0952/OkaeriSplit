@@ -128,8 +128,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       return null;
                     },
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => context.push('/forgot-password'),
+                      child: const Text('忘記密碼？'),
+                    ),
+                  ),
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
                     Text(
                       _errorMessage!,
                       style: TextStyle(

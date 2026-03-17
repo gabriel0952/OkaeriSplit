@@ -8,6 +8,8 @@ import 'package:app/features/auth/domain/usecases/sign_out.dart';
 import 'package:app/features/auth/domain/usecases/delete_account.dart';
 import 'package:app/features/auth/domain/usecases/upgrade_guest_account.dart';
 import 'package:app/features/auth/domain/usecases/sign_up.dart';
+import 'package:app/features/auth/domain/usecases/send_password_reset_email.dart';
+import 'package:app/features/auth/domain/usecases/update_password.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -48,6 +50,16 @@ final upgradeGuestAccountUseCaseProvider = Provider<UpgradeGuestAccount>((ref) {
 final getCurrentUserUseCaseProvider = Provider<GetCurrentUser>((ref) {
   return GetCurrentUser(ref.watch(authRepositoryProvider));
 });
+
+final sendPasswordResetEmailUseCaseProvider =
+    Provider<SendPasswordResetEmail>((ref) {
+  return SendPasswordResetEmail(ref.watch(authRepositoryProvider));
+});
+
+final updatePasswordUseCaseProvider = Provider<UpdatePassword>((ref) {
+  return UpdatePassword(ref.watch(authRepositoryProvider));
+});
+
 
 // Auth state stream
 final authStateProvider = StreamProvider<UserEntity?>((ref) {

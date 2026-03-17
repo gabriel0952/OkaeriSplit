@@ -23,6 +23,10 @@ abstract class AuthRepository {
 
   Future<AppResult<void>> deleteAccount();
 
+  Future<AppResult<void>> sendPasswordResetEmail(String email);
+
+  Future<AppResult<void>> updatePassword(String newPassword);
+
   Future<AppResult<UserEntity?>> getCurrentUser();
 
   Stream<UserEntity?> authStateChanges();

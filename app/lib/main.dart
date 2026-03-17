@@ -7,6 +7,8 @@ import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/routing/app_router.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +43,16 @@ Future<void> main() async {
   // Initialize HomeWidget App Group
   await HomeWidgetService.instance.init();
 
-  runApp(const ProviderScope(child: OkaeriSplitApp()));
+  runZonedGuarded(
+    () => runApp(const ProviderScope(child: OkaeriSplitApp())),
+    (error, stack) {
+      // supabase_flutter 2.x re-processes the recovery deep link via
+      // uriLinkStream after already consuming it via getInitialAppLink,
+      // causing an unhandled otp_expired AuthException. Suppress it.
+      if (error is AuthException && error.statusCode == 'otp_expired') return;
+      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+    },
+  );
 }
 
 class OkaeriSplitApp extends ConsumerStatefulWidget {

@@ -97,6 +97,30 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AppResult<void>> sendPasswordResetEmail(String email) async {
+    try {
+      await _dataSource.sendPasswordResetEmail(email);
+      return const Right(null);
+    } on AuthException catch (e) {
+      return Left(AuthFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> updatePassword(String newPassword) async {
+    try {
+      await _dataSource.updatePassword(newPassword);
+      return const Right(null);
+    } on AuthException catch (e) {
+      return Left(AuthFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   Future<AppResult<UserEntity?>> getCurrentUser() async {
     try {
       final user = _dataSource.getCurrentUser();

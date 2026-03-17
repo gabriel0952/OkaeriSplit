@@ -1,8 +1,10 @@
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:app/features/auth/presentation/screens/guest_login_screen.dart';
 import 'package:app/features/auth/presentation/screens/guest_upgrade_screen.dart';
 import 'package:app/features/auth/presentation/screens/login_screen.dart';
 import 'package:app/features/auth/presentation/screens/register_screen.dart';
+import 'package:app/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:app/features/expenses/presentation/screens/add_expense_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_detail_screen.dart';
@@ -84,6 +86,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // provider. Without this branch go_router throws "no routes for
       // location: com.raycat.okaerisplit://add-expense?groupId=...".
       if (state.uri.scheme == 'com.raycat.okaerisplit') {
+        if (state.uri.host == 'reset-password') {
+          return '/reset-password';
+        }
         if (!isLoggedIn) return '/login';
         if (state.uri.host == 'add-expense') {
           final gid = state.uri.queryParameters['groupId'];
@@ -98,7 +103,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute =
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/register' ||
-          state.matchedLocation == '/guest-login';
+          state.matchedLocation == '/guest-login' ||
+          state.matchedLocation == '/forgot-password';
 
       if (!isLoggedIn && !isAuthRoute) return '/login';
       // Guests should not access the main shell (dashboard/groups list/profile)
@@ -121,6 +127,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
       GoRoute(path: '/guest-login', builder: (_, _) => const GuestLoginScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        pageBuilder: (_, state) =>
+            _slidePage(state, const ForgotPasswordScreen()),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (_, _) => const ResetPasswordScreen(),
+      ),
       GoRoute(
         path: '/guest-upgrade',
         pageBuilder: (_, state) => _slidePage(state, const GuestUpgradeScreen()),
@@ -259,6 +274,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
     }
   });
+
 
   ref.onDispose(() {
     sub.cancel();

@@ -122,6 +122,18 @@ class SupabaseAuthDataSource {
     await _client.auth.signOut();
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'com.raycat.okaerisplit://reset-password',
+    );
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+
   UserEntity _mapUser(User user) {
     return UserEntity(
       id: user.id,
