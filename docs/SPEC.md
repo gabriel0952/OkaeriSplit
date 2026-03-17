@@ -54,13 +54,15 @@
 
 ```sql
 CREATE TABLE profiles (
-  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  display_name TEXT NOT NULL,
-  avatar_url  TEXT,
-  email       TEXT NOT NULL,
+  id               UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name     TEXT NOT NULL,
+  avatar_url       TEXT,
+  email            TEXT NOT NULL,
   default_currency TEXT NOT NULL DEFAULT 'TWD',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  is_guest         BOOLEAN NOT NULL DEFAULT false,
+  claim_code       TEXT UNIQUE,          -- 訪客認領碼（訪客帳號專用）
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 新使用者註冊時自動建立 profile
@@ -92,6 +94,7 @@ CREATE TABLE groups (
   currency    TEXT NOT NULL DEFAULT 'TWD',
   invite_code TEXT UNIQUE NOT NULL DEFAULT substr(md5(random()::text), 1, 6),
   created_by  UUID NOT NULL REFERENCES profiles(id),
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -187,7 +190,24 @@ CREATE TABLE settlements (
 CREATE INDEX idx_settlements_group_id ON settlements(group_id);
 ```
 
-### 2.8 `updated_at` 自動更新
+### 2.8 `share_links` — 網頁分享連結
+
+```sql
+CREATE TABLE share_links (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token      TEXT UNIQUE NOT NULL,   -- 128-bit 隨機 hex token
+  group_id   UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  created_by UUID NOT NULL REFERENCES profiles(id),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '3 months',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+- `token` 透過 `create_share_link()` RPC 產生，長度 32 chars（128-bit hex）
+- 匿名使用者透過 `x-share-token` HTTP header 傳遞 token，繞過 RLS 讀取群組資料
+- 有效期 3 個月，過期後連結自動失效
+
+### 2.9 `updated_at` 自動更新
 
 ```sql
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -213,7 +233,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON expenses
 ```
 profiles ──────< group_members >────── groups
     │                                      │
-    │                                      │
+    │                                      ├──< share_links
     ├──< expenses ──< expense_splits       │
     │         └──< expense_items           │
     │                                      │
@@ -233,6 +253,7 @@ ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE share_links ENABLE ROW LEVEL SECURITY;
 ```
 
 ### 共用輔助函式
@@ -244,6 +265,25 @@ RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM group_members
     WHERE group_id = gid AND user_id = auth.uid()
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- 判斷使用者是否為訪客
+CREATE OR REPLACE FUNCTION is_guest_user()
+RETURNS BOOLEAN AS $$
+  SELECT COALESCE(
+    (SELECT is_guest FROM profiles WHERE id = auth.uid()),
+    false
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- 驗證分享 token 是否有效（供匿名存取使用）
+CREATE OR REPLACE FUNCTION is_valid_share_token(token TEXT)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM share_links
+    WHERE share_links.token = $1
+      AND expires_at > now()
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 ```
@@ -306,17 +346,24 @@ CREATE POLICY "group_members_delete" ON group_members
 #### expenses
 
 ```sql
--- 群組成員可讀取
+-- 群組成員可讀取；匿名使用者透過有效 share token 也可讀取
 CREATE POLICY "expenses_select" ON expenses
   FOR SELECT TO authenticated USING (is_group_member(group_id));
 
--- 群組成員可新增（paid_by 不限於自己，可代付）
+-- 群組成員可新增，但訪客與封存群組禁止（paid_by 不限於自己，可代付）
 CREATE POLICY "expenses_insert" ON expenses
-  FOR INSERT TO authenticated WITH CHECK (is_group_member(group_id));
+  FOR INSERT TO authenticated WITH CHECK (
+    is_group_member(group_id)
+    AND NOT is_guest_user()
+    AND (SELECT status FROM groups WHERE id = group_id) = 'active'
+  );
 
--- 建立者可更新/刪除
+-- 建立者可更新/刪除（封存群組禁止）
 CREATE POLICY "expenses_update" ON expenses
-  FOR UPDATE TO authenticated USING (paid_by = auth.uid());
+  FOR UPDATE TO authenticated USING (
+    paid_by = auth.uid()
+    AND (SELECT status FROM groups WHERE id = group_id) = 'active'
+  );
 
 CREATE POLICY "expenses_delete" ON expenses
   FOR DELETE TO authenticated USING (paid_by = auth.uid());
@@ -367,10 +414,44 @@ CREATE POLICY "expense_splits_delete" ON expense_splits
 CREATE POLICY "settlements_select" ON settlements
   FOR SELECT TO authenticated USING (is_group_member(group_id));
 
--- 付款方可建立結算記錄
+-- 付款方可建立，但訪客與封存群組禁止
 CREATE POLICY "settlements_insert" ON settlements
   FOR INSERT TO authenticated WITH CHECK (
-    from_user = auth.uid() AND is_group_member(group_id)
+    from_user = auth.uid()
+    AND is_group_member(group_id)
+    AND NOT is_guest_user()
+    AND (SELECT status FROM groups WHERE id = group_id) = 'active'
+  );
+```
+
+#### share_links
+
+```sql
+-- 群組成員可建立自己的分享連結
+CREATE POLICY "share_links_insert" ON share_links
+  FOR INSERT TO authenticated WITH CHECK (
+    created_by = auth.uid() AND is_group_member(group_id)
+  );
+
+-- 群組成員可讀取（管理用）
+CREATE POLICY "share_links_select" ON share_links
+  FOR SELECT TO authenticated USING (is_group_member(group_id));
+```
+
+#### 匿名分享存取（透過 x-share-token header）
+
+匿名使用者需在 request header 帶入 `x-share-token: <token>`，PostgREST 將其轉為 `request.header.x-share-token` 可供 RLS policy 讀取：
+
+```sql
+-- 範例：允許匿名讀取有效 token 對應的群組
+CREATE POLICY "groups_select_anon" ON groups
+  FOR SELECT TO anon USING (
+    is_valid_share_token(current_setting('request.header.x-share-token', true))
+    AND id = (
+      SELECT group_id FROM share_links
+      WHERE token = current_setting('request.header.x-share-token', true)
+        AND expires_at > now()
+    )
   );
 ```
 
@@ -599,20 +680,25 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 #### `join_group_by_code(p_invite_code TEXT)`
 
-透過邀請碼加入群組。
+透過邀請碼加入群組。輸入大小寫不敏感（`LOWER()` 正規化）；封存群組拒絕加入。
 
 ```sql
 CREATE OR REPLACE FUNCTION join_group_by_code(p_invite_code TEXT)
 RETURNS UUID AS $$
 DECLARE
   v_group_id UUID;
+  v_status   TEXT;
 BEGIN
-  SELECT id INTO v_group_id
+  SELECT id, status INTO v_group_id, v_status
   FROM groups
-  WHERE invite_code = p_invite_code;
+  WHERE invite_code = LOWER(p_invite_code);
 
   IF v_group_id IS NULL THEN
     RAISE EXCEPTION 'Invalid invite code';
+  END IF;
+
+  IF v_status = 'archived' THEN
+    RAISE EXCEPTION 'Group is archived';
   END IF;
 
   INSERT INTO group_members (group_id, user_id, role)
@@ -620,6 +706,73 @@ BEGIN
   ON CONFLICT (group_id, user_id) DO NOTHING;
 
   RETURN v_group_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+#### `reopen_group(p_group_id UUID)`
+
+重新開啟已封存的群組（Owner only）。
+
+```sql
+CREATE OR REPLACE FUNCTION reopen_group(p_group_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM group_members
+    WHERE group_id = p_group_id AND user_id = auth.uid() AND role = 'owner'
+  ) THEN
+    RAISE EXCEPTION 'Only the owner can reopen a group';
+  END IF;
+
+  UPDATE groups SET status = 'active' WHERE id = p_group_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+#### `create_share_link(p_group_id UUID)`
+
+產生 128-bit hex 網頁分享 token，有效期 3 個月。
+
+```sql
+CREATE OR REPLACE FUNCTION create_share_link(p_group_id UUID)
+RETURNS TEXT AS $$
+DECLARE
+  v_token TEXT;
+BEGIN
+  IF NOT is_group_member(p_group_id) THEN
+    RAISE EXCEPTION 'Not a member of this group';
+  END IF;
+
+  v_token := encode(gen_random_bytes(16), 'hex');
+
+  INSERT INTO share_links (token, group_id, created_by)
+  VALUES (v_token, p_group_id, auth.uid());
+
+  RETURN v_token;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+#### `delete_user_account()`
+
+帳號完整刪除，依正確順序移除所有關聯資料以避免 FK constraint。
+
+```sql
+CREATE OR REPLACE FUNCTION delete_user_account()
+RETURNS VOID AS $$
+DECLARE
+  _uid UUID := auth.uid();
+BEGIN
+  IF _uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+
+  -- 依序刪除：splits → expenses（cascade splits）→ settlements → group_members → profiles → auth
+  DELETE FROM expense_splits WHERE user_id = _uid;
+  DELETE FROM expenses WHERE paid_by = _uid;
+  DELETE FROM settlements WHERE from_user = _uid OR to_user = _uid;
+  DELETE FROM group_members WHERE user_id = _uid;
+  DELETE FROM profiles WHERE id = _uid;
+  DELETE FROM auth.users WHERE id = _uid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
@@ -804,6 +957,11 @@ final expensesProvider = FutureProvider.family<List<Expense>, String>(
 final appRouter = GoRouter(
   initialLocation: '/dashboard',
   redirect: (context, state) {
+    // 處理 custom URL scheme deep links
+    if (state.uri.scheme == 'com.raycat.okaerisplit') {
+      if (state.uri.host == 'reset-password') return '/reset-password';
+      if (state.uri.host == 'add-expense') { /* navigate to group */ }
+    }
     final isLoggedIn = /* check auth state */;
     if (!isLoggedIn) return '/login';
     return null;
@@ -812,6 +970,10 @@ final appRouter = GoRouter(
     // Auth
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+    GoRoute(path: '/guest-login', builder: (_, __) => const GuestLoginScreen()),
+    GoRoute(path: '/guest-upgrade', builder: (_, __) => const GuestUpgradeScreen()),
+    GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
+    GoRoute(path: '/reset-password', builder: (_, __) => const ResetPasswordScreen()),
 
     // Main (with bottom navigation shell)
     ShellRoute(
@@ -1321,3 +1483,78 @@ Future<void> flush() async {
 - **ExpenseListScreen AppBar**：當 `pendingCount > 0` 時顯示 `待同步 N 筆` 的小 Chip（`pendingSyncBadge`）
 - **新增消費成功（離線）**：SnackBar 顯示「已離線儲存，稍後將自動同步」
 - **離線時新增消費**：付款人 / 分攤成員從 `group_members_cache` 讀取，其餘流程與線上相同
+
+---
+
+## 12. Supabase Edge Functions
+
+四個 Edge Functions 處理需要 admin 權限或複雜多步驟操作的邏輯，皆以 Deno + TypeScript 實作。
+
+### 12.1 `create_guest_member`
+
+建立訪客帳號並加入群組。
+
+| 項目 | 說明 |
+|------|------|
+| 呼叫者 | 已登入的群組成員 |
+| 輸入 | `group_id`, `display_name` |
+| 輸出 | `{ claim_code, user_id }` |
+
+**流程：**
+1. 驗證呼叫者為群組成員
+2. 產生 6 碼英數認領碼（`claim_code`）
+3. 建立訪客 auth user（`guest-<UUID>@internal.okaerisplit.app`，無密碼，email 已驗證）
+4. 建立 profile：`is_guest: true`，存入 `claim_code`
+5. 加入 `group_members`（role: member）
+6. 若步驟 4/5 失敗，rollback 刪除 auth user
+
+### 12.2 `claim_guest_member`
+
+訪客透過群組碼 + 認領碼驗證身份，取得 magic link token 登入。
+
+| 項目 | 說明 |
+|------|------|
+| 呼叫者 | 未登入（或任意用戶） |
+| 輸入 | `group_invite_code`, `claim_code` |
+| 輸出 | `{ hashed_token, group_id }` |
+| Rate Limit | 5 次 / IP / 分鐘 |
+
+**流程：**
+1. 以 `LOWER(group_invite_code)` 查找群組
+2. 以 `UPPER(claim_code)` 查找訪客 profile（`is_guest = true`）
+3. 確認該訪客是該群組成員
+4. 呼叫 `auth.admin.generateLink({ type: 'magiclink' })` 取得 hashed_token
+5. 回傳 token，前端呼叫 `supabase.auth.verifyOtp` 完成登入
+
+### 12.3 `upgrade_guest_account`
+
+訪客升級為正式帳號（設定 Email + 密碼）。
+
+| 項目 | 說明 |
+|------|------|
+| 呼叫者 | 已登入的訪客（`user_metadata.is_guest = true`） |
+| 輸入 | `email`, `password`（≥8 碼）, `display_name` |
+| 輸出 | `{ success: true }` |
+
+**流程：**
+1. 驗證輸入格式
+2. 呼叫 `auth.admin.updateUserById`：設定 email、password、`is_guest: false`，`email_confirm: true`
+3. 更新 profiles：`is_guest = false`、`email`、`display_name`
+4. Email 衝突時回傳 409
+
+### 12.4 `archive_group`
+
+封存群組：移除訪客成員並標記群組為 archived。
+
+| 項目 | 說明 |
+|------|------|
+| 呼叫者 | 群組 Owner |
+| 輸入 | `group_id` |
+| 輸出 | `{ success: true }` |
+
+**流程：**
+1. 驗證呼叫者為 owner
+2. 查詢群組內所有訪客成員
+3. 逐一呼叫 `auth.admin.deleteUser`（CASCADE 自動移除 profile + group_members）
+4. 更新 `groups.status = 'archived'`
+5. 個別訪客刪除失敗不中止整體流程（non-fatal）
