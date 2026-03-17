@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     // 1.5 Update profiles table
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({ is_guest: false, display_name })
+      .update({ is_guest: false, display_name, email })
       .eq('id', caller.id);
 
     if (profileError) {

@@ -141,11 +141,11 @@ class _JoinGroupDialogState extends ConsumerState<JoinGroupDialog> {
                   controller: _controller,
                   focusNode: _focusNode,
                   textAlign: TextAlign.center,
-                  textCapitalization: TextCapitalization.characters,
+                  textCapitalization: TextCapitalization.none,
                   maxLength: 6,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                    _UpperCaseFormatter(),
+                    _LowerCaseFormatter(),
                   ],
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         letterSpacing: 10,
@@ -232,12 +232,12 @@ class _JoinGroupDialogState extends ConsumerState<JoinGroupDialog> {
   }
 }
 
-class _UpperCaseFormatter extends TextInputFormatter {
+class _LowerCaseFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    return newValue.copyWith(text: newValue.text.toUpperCase());
+    return newValue.copyWith(text: newValue.text.toLowerCase());
   }
 }
