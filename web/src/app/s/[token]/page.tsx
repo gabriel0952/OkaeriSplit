@@ -9,6 +9,7 @@ import {
   Divider,
   Stack,
 } from '@mui/material';
+import Image from 'next/image';
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -65,7 +66,7 @@ function initials(name: string): string {
 }
 
 const AVATAR_COLORS = [
-  '#6750A4', '#B5838D', '#3D5A80', '#81B29A',
+  '#ED9153', '#B5838D', '#3D5A80', '#81B29A',
   '#E07A5F', '#4A7C59', '#7B6D8D', '#C17817',
 ];
 
@@ -178,11 +179,11 @@ export default async function SharePage({ params }: Props) {
   const memberMapObj = Object.fromEntries(memberMap);
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#F6F4FB', pb: 6 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#FDF8F4', pb: 6 }}>
       {/* Header */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #6750A4 0%, #8B74C2 100%)',
+          background: 'linear-gradient(135deg, #ED9153 0%, #E07430 100%)',
           color: 'white',
           pt: 4,
           pb: 5,
@@ -190,10 +191,19 @@ export default async function SharePage({ params }: Props) {
         }}
       >
         <Container maxWidth="sm">
-          <Typography variant="caption" sx={{ opacity: 0.75, letterSpacing: 1 }}>
-            OkaeriSplit
-          </Typography>
-          <Typography variant="h5" fontWeight="bold" sx={{ mt: 0.5, mb: 1.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Image
+              src="/logo.png"
+              alt="OkaeriSplit"
+              width={28}
+              height={28}
+              style={{ borderRadius: 6 }}
+            />
+            <Typography variant="caption" sx={{ opacity: 0.9, letterSpacing: 1, fontWeight: 600 }}>
+              OkaeriSplit
+            </Typography>
+          </Stack>
+          <Typography variant="h5" fontWeight="bold" sx={{ mb: 1.5 }}>
             {g.name}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

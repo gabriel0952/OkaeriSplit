@@ -417,7 +417,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             child: TextField(
               controller: _descriptionController,
               decoration: InputDecoration(
-                hintText: '描述這筆消費…',
+                hintText: '消費名稱（必填）',
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
