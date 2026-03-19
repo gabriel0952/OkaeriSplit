@@ -15,6 +15,7 @@ import 'package:app/features/groups/domain/usecases/delete_group.dart';
 import 'package:app/features/groups/domain/usecases/create_share_link.dart';
 import 'package:app/features/groups/domain/usecases/invite_user.dart';
 import 'package:app/features/groups/domain/usecases/leave_group.dart';
+import 'package:app/features/groups/domain/usecases/remove_member.dart';
 import 'package:app/features/groups/domain/usecases/search_users.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -73,6 +74,10 @@ final searchUsersUseCaseProvider = Provider<SearchUsers>((ref) {
 
 final inviteUserUseCaseProvider = Provider<InviteUser>((ref) {
   return InviteUser(ref.watch(groupRepositoryProvider));
+});
+
+final removeMemberUseCaseProvider = Provider<RemoveMember>((ref) {
+  return RemoveMember(ref.watch(groupRepositoryProvider));
 });
 
 final createShareLinkUseCaseProvider = Provider<CreateShareLink>((ref) {

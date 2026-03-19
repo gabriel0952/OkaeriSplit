@@ -334,6 +334,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         .map((member) => MemberAvatar(
                               member: member,
                               resolvedName: resolveDisplayName(members, member),
+                              onRemove: isOwner &&
+                                      !group.isArchived &&
+                                      member.userId != currentUser?.id &&
+                                      member.role != 'owner'
+                                  ? () => _confirmRemoveMember(
+                                        context,
+                                        ref,
+                                        member.userId,
+                                        resolveDisplayName(members, member),
+                                      )
+                                  : null,
                             ))
                         .toList(),
                   ),
@@ -539,6 +550,54 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       (_) {
         ref.invalidate(groupsProvider);
         context.go('/groups');
+      },
+    );
+  }
+
+  Future<void> _confirmRemoveMember(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    String displayName,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除成員'),
+        content: Text('確定要將「$displayName」從群組中移除嗎？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final removeMember = ref.read(removeMemberUseCaseProvider);
+    final result = await removeMember(groupId: groupId, userId: userId);
+
+    if (!context.mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+      (_) {
+        ref.invalidate(groupMembersProvider(groupId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已移除「$displayName」')),
+        );
       },
     );
   }

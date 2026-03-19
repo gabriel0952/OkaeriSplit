@@ -87,6 +87,19 @@ class GroupRepositoryImpl implements GroupRepository {
   }
 
   @override
+  Future<AppResult<void>> removeMember({
+    required String groupId,
+    required String userId,
+  }) async {
+    try {
+      await _remote.removeMember(groupId: groupId, userId: userId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   Future<AppResult<List<GroupMemberEntity>>> getGroupMembers(
     String groupId,
   ) async {

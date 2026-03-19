@@ -59,6 +59,17 @@ class SupabaseGroupDataSource {
         .eq('user_id', userId);
   }
 
+  Future<void> removeMember({
+    required String groupId,
+    required String userId,
+  }) async {
+    await _client
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+  }
+
   Future<List<GroupMemberEntity>> getGroupMembers(String groupId) async {
     final response = await _client
         .from('group_members')

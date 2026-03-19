@@ -16,6 +16,11 @@ abstract class GroupRepository {
 
   Future<AppResult<void>> leaveGroup(String groupId);
 
+  Future<AppResult<void>> removeMember({
+    required String groupId,
+    required String userId,
+  });
+
   Future<AppResult<List<GroupMemberEntity>>> getGroupMembers(String groupId);
 
   Future<AppResult<List<Map<String, dynamic>>>> searchUsers(String query);
