@@ -329,8 +329,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
   Widget _buildAmountSection(BuildContext context, String currency) {
     final colorScheme = Theme.of(context).colorScheme;
-    final amount = double.tryParse(_amountController.text) ?? 0;
-    final hasAmount = _amountController.text.isNotEmpty && amount > 0;
 
     return GestureDetector(
       onTap: () => _amountFocusNode.requestFocus(),
@@ -376,35 +374,32 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Task 3.2: Large amount display
-            Text(
-              hasAmount
-                  ? _formatAmountDisplay(_amountController.text)
-                  : '0',
+            // Amount input — visible TextField so the cursor tracks naturally
+            TextField(
+              controller: _amountController,
+              focusNode: _amountFocusNode,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [_AmountInputFormatter()],
+              onChanged: (_) => setState(() {}),
               style: TextStyle(
                 fontSize: 48,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -1.0,
-                color: hasAmount
-                    ? colorScheme.onSurface
-                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                color: colorScheme.onSurface,
               ),
-            ),
-
-            // Task 3.1: Hidden TextField for actual input
-            SizedBox(
-              height: 0,
-              child: TextField(
-                controller: _amountController,
-                focusNode: _amountFocusNode,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                // Task 3.3: FilteringTextInputFormatter — digits + one decimal point, max 2 decimal places
-                inputFormatters: [
-                  _AmountInputFormatter(),
-                ],
-                onChanged: (_) => setState(() {}),
-                style: const TextStyle(fontSize: 1, color: Colors.transparent),
-                decoration: const InputDecoration(border: InputBorder.none),
+              cursorColor: colorScheme.primary,
+              cursorHeight: 44,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isDense: true,
+                hintText: '0',
+                hintStyle: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -1.0,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                ),
               ),
             ),
 
@@ -418,12 +413,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ),
       ),
     );
-  }
-
-  String _formatAmountDisplay(String raw) {
-    if (raw.isEmpty) return '0';
-    // Keep user's raw input formatting (they may still be typing "1.")
-    return raw;
   }
 
   void _showCurrencyPicker(BuildContext context) {
