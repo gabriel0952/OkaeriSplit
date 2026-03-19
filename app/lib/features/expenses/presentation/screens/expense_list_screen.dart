@@ -14,6 +14,7 @@ import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:intl/intl.dart';
 
 class ExpenseListScreen extends ConsumerStatefulWidget {
@@ -149,6 +150,34 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
       _selectedPayer = null;
       _dateRange = null;
     });
+  }
+
+  void _showExpenseActions(
+    BuildContext context,
+    ExpenseEntity expense,
+    String groupId,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy_outlined),
+              title: const Text('複製此消費'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push(
+                  '/groups/$groupId/add-expense',
+                  extra: expense,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showFilterSheet(BuildContext context) {
@@ -409,9 +438,11 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
 
     final expensesAsync = ref.watch(expensesProvider(groupId));
     final membersAsync = ref.watch(groupMembersProvider(groupId));
+    final groupAsync = ref.watch(groupDetailProvider(groupId));
 
     final pendingCount = ref.watch(pendingCountProvider);
     final isGuest = ref.watch(isGuestProvider);
+    final isArchived = groupAsync.valueOrNull?.isArchived ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -501,9 +532,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           }
 
           final members = membersAsync.valueOrNull ?? [];
-          final memberMap = {
-            for (final m in members) m.userId: m.displayName,
-          };
+          final memberMap = buildResolvedMemberMap(members);
           final customCategories =
               ref.watch(groupCategoriesProvider(groupId)).valueOrNull ?? [];
 
@@ -717,6 +746,9 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                                                   : () => context.push(
                                                         '/groups/$groupId/expenses/${expense.id}',
                                                       ),
+                                              onLongPress: expense.isPending || isGuest || isArchived
+                                                  ? null
+                                                  : () => _showExpenseActions(context, expense, groupId),
                                             ))
                                         .toList(),
                                   ),

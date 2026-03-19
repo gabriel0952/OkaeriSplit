@@ -6,7 +6,9 @@ import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/expenses/domain/utils/split_calculator.dart';
 import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
+import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
 import 'package:app/features/expenses/presentation/widgets/icon_picker_dialog.dart';
@@ -20,10 +22,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
-  const AddExpenseScreen({super.key, required this.groupId, this.expenseId});
+  const AddExpenseScreen({
+    super.key,
+    required this.groupId,
+    this.expenseId,
+    this.templateExpense,
+  });
 
   final String groupId;
   final String? expenseId;
+  /// When set, pre-fills the form as a copy of this expense (id cleared, date = today).
+  final ExpenseEntity? templateExpense;
 
   bool get isEditing => expenseId != null;
 
@@ -205,6 +214,34 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           onRetry: () => ref.invalidate(groupMembersProvider(widget.groupId)),
         ),
         data: (members) {
+          // Pre-fill from template (duplicate mode, first load only)
+          if (widget.templateExpense != null && !_isLoaded) {
+            final t = widget.templateExpense!;
+            _amountController.text = t.amount.toStringAsFixed(
+              t.amount.truncateToDouble() == t.amount ? 0 : 2,
+            );
+            _descriptionController.text = t.description;
+            _noteController.text = t.note ?? '';
+            _category = t.category;
+            _expenseDate = DateTime.now();
+            _paidBy = t.paidBy;
+            _selectedCurrency = t.currency;
+            final validSplitIds = t.splits
+                .map((s) => s.userId)
+                .where((id) => members.any((m) => m.userId == id))
+                .toSet();
+            _selectedMemberIds = validSplitIds.isNotEmpty
+                ? validSplitIds
+                : members.map((m) => m.userId).toSet();
+            // Degrade itemized to fixedAmount (items not preserved in entity)
+            if (t.splits.isNotEmpty) {
+              _splitType = t.splits.first.splitType == SplitType.itemized
+                  ? SplitType.fixedAmount
+                  : t.splits.first.splitType;
+            }
+            _isLoaded = true;
+          }
+
           // Initialize defaults
           if (_paidBy == null && currentUser != null) {
             _paidBy = currentUser.id;
@@ -213,6 +250,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             _selectedMemberIds = members.map((m) => m.userId).toSet();
           }
           _ensureControllers(members);
+
+          // After controllers are ready, pre-fill fixedAmount values from template
+          if (widget.templateExpense != null &&
+              _splitType == SplitType.fixedAmount) {
+            for (final split in widget.templateExpense!.splits) {
+              _fixedAmountControllers[split.userId]?.text =
+                  split.amount.toStringAsFixed(
+                split.amount.truncateToDouble() == split.amount ? 0 : 2,
+              );
+            }
+          }
 
           final groupCurrency =
               groupAsync.valueOrNull?.currency ?? AppConstants.defaultCurrency;
@@ -470,7 +518,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               children: members.map((m) {
                 final isSelected = _paidBy == m.userId;
                 return _MemberChip(
-                  name: m.displayName,
+                  name: resolveDisplayName(members, m),
                   isSelected: isSelected,
                   selectionMode: _ChipSelectionMode.single,
                   onTap: () => setState(() => _paidBy = m.userId),
@@ -505,7 +553,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               children: members.map((m) {
                 final isSelected = _selectedMemberIds.contains(m.userId);
                 return _MemberChip(
-                  name: m.displayName,
+                  name: resolveDisplayName(members, m),
                   isSelected: isSelected,
                   selectionMode: _ChipSelectionMode.multi,
                   onTap: () {
@@ -858,7 +906,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: Row(
           children: [
             Expanded(
-              child: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle),
+              child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle),
             ),
             SizedBox(
               width: 52,
@@ -918,7 +966,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Expanded(child: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle)),
+              Expanded(child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle)),
               SizedBox(
                 width: 120,
                 child: TextField(

@@ -6,6 +6,7 @@ import 'package:app/features/auth/presentation/screens/login_screen.dart';
 import 'package:app/features/auth/presentation/screens/register_screen.dart';
 import 'package:app/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/presentation/screens/add_expense_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_detail_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_list_screen.dart';
@@ -212,6 +213,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                           state,
                           AddExpenseScreen(
                             groupId: state.pathParameters['groupId']!,
+                            templateExpense: state.extra as ExpenseEntity?,
                           ),
                         ),
                       ),

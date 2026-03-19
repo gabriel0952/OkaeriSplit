@@ -7,11 +7,13 @@ class DebtRow extends StatelessWidget {
     required this.balance,
     required this.currency,
     required this.isCurrentUser,
+    this.resolvedName,
   });
 
   final BalanceEntity balance;
   final String currency;
   final bool isCurrentUser;
+  final String? resolvedName;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +31,7 @@ class DebtRow extends StatelessWidget {
             : null,
       ),
       title: Text(
-        balance.displayName,
+        resolvedName ?? balance.displayName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),

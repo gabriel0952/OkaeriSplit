@@ -74,6 +74,7 @@ class SupabaseGroupDataSource {
             profile?['display_name'] as String? ??
             profile?['email'] as String? ??
             '',
+        email: profile?['email'] as String?,
         avatarUrl: profile?['avatar_url'] as String?,
         role: row['role'] as String? ?? 'member',
         joinedAt: DateTime.parse(row['joined_at'] as String),

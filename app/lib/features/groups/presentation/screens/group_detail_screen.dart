@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/constants/app_constants.dart';
+import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart' show Share;
 
@@ -330,7 +331,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 data: (members) => Card(
                   child: Column(
                     children: members
-                        .map((member) => MemberAvatar(member: member))
+                        .map((member) => MemberAvatar(
+                              member: member,
+                              resolvedName: resolveDisplayName(members, member),
+                            ))
                         .toList(),
                   ),
                 ),

@@ -11,6 +11,7 @@ class ExpenseCard extends StatelessWidget {
     required this.expense,
     this.paidByName,
     this.onTap,
+    this.onLongPress,
     this.customCategories = const [],
     this.showCard = true,
   });
@@ -18,6 +19,7 @@ class ExpenseCard extends StatelessWidget {
   final ExpenseEntity expense;
   final String? paidByName;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final List<GroupCategoryEntity> customCategories;
   final bool showCard;
 
@@ -28,6 +30,7 @@ class ExpenseCard extends StatelessWidget {
 
     final content = InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(

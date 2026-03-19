@@ -2,9 +2,10 @@ import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:flutter/material.dart';
 
 class MemberAvatar extends StatelessWidget {
-  const MemberAvatar({super.key, required this.member});
+  const MemberAvatar({super.key, required this.member, this.resolvedName});
 
   final GroupMemberEntity member;
+  final String? resolvedName;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +25,7 @@ class MemberAvatar extends StatelessWidget {
               )
             : null,
       ),
-      title: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(resolvedName ?? member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: member.isGuest
           ? Chip(
               label: Text(

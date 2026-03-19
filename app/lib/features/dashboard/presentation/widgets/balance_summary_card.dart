@@ -48,7 +48,8 @@ class BalanceSummaryCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _SummaryColumn(
-                      label: '應收',
+                      label: '別人欠你',
+                      hint: '各群組應收之和',
                       amount: totalReceivable,
                       color: positiveColor,
                       currency: currencyLabel,
@@ -60,7 +61,8 @@ class BalanceSummaryCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: _SummaryColumn(
-                      label: '應付',
+                      label: '你欠別人',
+                      hint: '各群組應付之和',
                       amount: totalPayable,
                       color: negativeColor,
                       currency: currencyLabel,
@@ -72,7 +74,8 @@ class BalanceSummaryCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: _SummaryColumn(
-                      label: '淨額',
+                      label: '淨差額',
+                      hint: '應收減去應付',
                       amount: net,
                       color: net >= 0 ? positiveColor : negativeColor,
                       currency: currencyLabel,
@@ -91,12 +94,14 @@ class BalanceSummaryCard extends StatelessWidget {
 class _SummaryColumn extends StatelessWidget {
   const _SummaryColumn({
     required this.label,
+    required this.hint,
     required this.amount,
     required this.color,
     required this.currency,
   });
 
   final String label;
+  final String hint;
   final double amount;
   final Color color;
   final String currency;
@@ -109,15 +114,26 @@ class _SummaryColumn extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
               ),
+          textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           '$currency ${amount.toStringAsFixed(0)}',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w700,
               ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          hint,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                fontSize: 10,
+              ),
+          textAlign: TextAlign.center,
         ),
       ],
     );

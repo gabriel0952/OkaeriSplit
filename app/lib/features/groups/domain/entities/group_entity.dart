@@ -29,6 +29,7 @@ class GroupMemberEntity {
     required this.groupId,
     required this.userId,
     required this.displayName,
+    this.email,
     this.avatarUrl,
     required this.role,
     required this.joinedAt,
@@ -38,6 +39,7 @@ class GroupMemberEntity {
   final String groupId;
   final String userId;
   final String displayName;
+  final String? email;
   final String? avatarUrl;
   final String role;
   final DateTime joinedAt;

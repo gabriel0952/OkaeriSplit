@@ -11,6 +11,7 @@ import 'package:app/features/settlements/presentation/providers/settlement_provi
 import 'package:app/features/settlements/presentation/widgets/balance_card.dart';
 import 'package:app/features/settlements/presentation/widgets/debt_row.dart';
 import 'package:app/features/settlements/presentation/widgets/simplified_debt_row.dart';
+import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +31,7 @@ class BalanceScreen extends ConsumerWidget {
 
     final balancesAsync = ref.watch(balancesProvider(groupId));
     final groupAsync = ref.watch(groupDetailProvider(groupId));
+    final membersAsync = ref.watch(groupMembersProvider(groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
     final isGuest = ref.watch(isGuestProvider);
 
@@ -65,6 +67,8 @@ class BalanceScreen extends ConsumerWidget {
 
           final currency = groupAsync.valueOrNull?.currency ?? 'TWD';
           final simplifiedDebts = ref.watch(simplifiedDebtsProvider(groupId));
+          final members = membersAsync.valueOrNull ?? [];
+          final resolvedMap = buildResolvedMemberMap(members);
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -100,12 +104,15 @@ class BalanceScreen extends ConsumerWidget {
                         )
                       : Column(
                           children: simplifiedDebts.map((debt) {
-                            final isFromCurrentUser =
-                                debt.fromUserId == currentUser?.id;
+                            final isParticipant =
+                                debt.fromUserId == currentUser?.id ||
+                                debt.toUserId == currentUser?.id;
                             return SimplifiedDebtRow(
                               debt: debt,
                               currency: currency,
-                              isFromCurrentUser: isFromCurrentUser,
+                              canPay: isParticipant,
+                              fromName: resolvedMap[debt.fromUserId],
+                              toName: resolvedMap[debt.toUserId],
                               onPay: isGuest
                                   ? null
                                   : () => _handlePay(
@@ -136,6 +143,7 @@ class BalanceScreen extends ConsumerWidget {
                         balance: balance,
                         currency: currency,
                         isCurrentUser: isCurrentUser,
+                        resolvedName: resolvedMap[balance.userId],
                       );
                     }).toList(),
                   ),

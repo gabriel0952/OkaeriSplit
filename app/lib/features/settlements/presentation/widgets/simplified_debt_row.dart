@@ -6,30 +6,41 @@ class SimplifiedDebtRow extends StatelessWidget {
     super.key,
     required this.debt,
     required this.currency,
-    required this.isFromCurrentUser,
+    required this.canPay,
+    this.fromName,
+    this.toName,
     this.onPay,
   });
 
   final SimplifiedDebtEntity debt;
   final String currency;
-  final bool isFromCurrentUser;
+  /// True when the current user is either the payer or the payee.
+  final bool canPay;
+  /// Resolved display name override for the from-user (disambiguation).
+  final String? fromName;
+  /// Resolved display name override for the to-user (disambiguation).
+  final String? toName;
   final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedFrom = fromName ?? debt.fromDisplayName;
+    final resolvedTo = toName ?? debt.toDisplayName;
     return ListTile(
       leading: CircleAvatar(
         backgroundImage: debt.fromAvatarUrl != null
             ? NetworkImage(debt.fromAvatarUrl!)
             : null,
         child: debt.fromAvatarUrl == null
-            ? Text(debt.fromDisplayName.isNotEmpty
-                ? debt.fromDisplayName[0].toUpperCase()
+            ? Text(resolvedFrom.isNotEmpty
+                ? resolvedFrom[0].toUpperCase()
                 : '?')
             : null,
       ),
       title: Text(
-        '${debt.fromDisplayName} → ${debt.toDisplayName}',
+        '$resolvedFrom → $resolvedTo',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
       subtitle: Text(
@@ -39,7 +50,7 @@ class SimplifiedDebtRow extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
       ),
-      trailing: isFromCurrentUser
+      trailing: canPay
           ? FilledButton.tonal(
               onPressed: onPay,
               style: FilledButton.styleFrom(
