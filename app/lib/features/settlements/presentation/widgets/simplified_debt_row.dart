@@ -67,14 +67,17 @@ class SimplifiedDebtRow extends StatelessWidget {
           ),
           if (canPay) ...[
             const SizedBox(width: 8),
-            FilledButton.tonal(
-              onPressed: onPay,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(64, 34),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+            SizedBox(
+              width: 64,
+              height: 34,
+              child: FilledButton.tonal(
+                onPressed: onPay,
+                style: FilledButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.zero,
+                ),
+                child: const Text('付款'),
               ),
-              child: const Text('付款'),
             ),
           ],
         ],

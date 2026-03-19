@@ -105,12 +105,15 @@ class _SummaryItem extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 4),
-        Text(
-          '$currency ${amount.toStringAsFixed(0)}',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '$currency ${amount.toStringAsFixed(0)}',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
         ),
       ],
     );
