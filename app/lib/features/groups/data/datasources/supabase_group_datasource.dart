@@ -63,11 +63,10 @@ class SupabaseGroupDataSource {
     required String groupId,
     required String userId,
   }) async {
-    await _client
-        .from('group_members')
-        .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId);
+    await _client.rpc(
+      'remove_group_member',
+      params: {'p_group_id': groupId, 'p_user_id': userId},
+    );
   }
 
   Future<List<GroupMemberEntity>> getGroupMembers(String groupId) async {
