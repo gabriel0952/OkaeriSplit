@@ -14,6 +14,7 @@ import 'package:app/features/expenses/presentation/widgets/category_picker.dart'
 import 'package:app/features/expenses/presentation/widgets/icon_picker_dialog.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1585,6 +1586,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           setState(() => _isSubmitting = false);
           ref.invalidate(expensesProvider(widget.groupId));
           ref.invalidate(expenseDetailProvider(widget.expenseId!));
+          ref.invalidate(balancesProvider(widget.groupId));
           if (mounted) context.pop();
         },
       );
@@ -1656,6 +1658,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           }
           setState(() => _isSubmitting = false);
           ref.invalidate(expensesProvider(widget.groupId));
+          ref.invalidate(balancesProvider(widget.groupId));
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

@@ -8,6 +8,7 @@ import 'package:app/features/expenses/presentation/providers/expense_provider.da
 import 'package:app/features/expenses/presentation/widgets/category_picker.dart';
 import 'package:app/features/expenses/presentation/widgets/split_summary.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -307,6 +308,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
       },
       (_) {
         ref.invalidate(expensesProvider(groupId));
+        ref.invalidate(balancesProvider(groupId));
         context.pop();
       },
     );
