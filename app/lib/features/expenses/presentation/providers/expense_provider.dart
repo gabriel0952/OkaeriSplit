@@ -75,6 +75,10 @@ final expensesProvider = FutureProvider.family<List<ExpenseEntity>, String>((
   ref,
   groupId,
 ) async {
+  // Re-fetch automatically when the logged-in user changes.
+  final currentUser = ref.watch(authStateProvider).valueOrNull;
+  if (currentUser == null) return [];
+
   final getExpenses = ref.watch(getExpensesUseCaseProvider);
   final result = await getExpenses(groupId);
   return result.fold(

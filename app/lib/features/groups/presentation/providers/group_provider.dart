@@ -81,6 +81,10 @@ final createShareLinkUseCaseProvider = Provider<CreateShareLink>((ref) {
 
 // Presentation providers
 final groupsProvider = FutureProvider<List<GroupEntity>>((ref) async {
+  // Re-fetch automatically when the logged-in user changes (e.g. after logout/re-login).
+  final currentUser = ref.watch(authStateProvider).valueOrNull;
+  if (currentUser == null) return [];
+
   final getGroups = ref.watch(getGroupsUseCaseProvider);
   final result = await getGroups();
   return result.fold(
