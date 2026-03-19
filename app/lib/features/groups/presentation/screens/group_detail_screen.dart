@@ -329,24 +329,51 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onRetry: () => ref.invalidate(groupMembersProvider(groupId)),
                 ),
                 data: (members) => Card(
+                  clipBehavior: Clip.antiAlias,
                   child: Column(
-                    children: members
-                        .map((member) => MemberAvatar(
-                              member: member,
-                              resolvedName: resolveDisplayName(members, member),
-                              onRemove: isOwner &&
-                                      !group.isArchived &&
-                                      member.userId != currentUser?.id &&
-                                      member.role != 'owner'
-                                  ? () => _confirmRemoveMember(
-                                        context,
-                                        ref,
-                                        member.userId,
-                                        resolveDisplayName(members, member),
-                                      )
-                                  : null,
-                            ))
-                        .toList(),
+                    children: members.map((member) {
+                      final resolvedName =
+                          resolveDisplayName(members, member);
+                      final canRemove = isOwner &&
+                          !group.isArchived &&
+                          member.userId != currentUser?.id &&
+                          member.role != 'owner';
+
+                      final tile = MemberAvatar(
+                        member: member,
+                        resolvedName: resolvedName,
+                      );
+
+                      if (!canRemove) return tile;
+
+                      return Dismissible(
+                        key: Key(member.userId),
+                        direction: DismissDirection.endToStart,
+                        background: ColoredBox(
+                          color:
+                              Theme.of(context).colorScheme.errorContainer,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 20),
+                              child: Icon(
+                                Icons.person_remove_outlined,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ),
+                        confirmDismiss: (_) => _tryRemoveMember(
+                          context,
+                          ref,
+                          member.userId,
+                          resolvedName,
+                        ),
+                        child: tile,
+                      );
+                    }).toList(),
                   ),
                 ),
               ),
@@ -554,7 +581,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     );
   }
 
-  Future<void> _confirmRemoveMember(
+  /// Returns true if the member was successfully removed (Dismissible uses this
+  /// to decide whether to animate the item out of the list).
+  Future<bool> _tryRemoveMember(
     BuildContext context,
     WidgetRef ref,
     String userId,
@@ -581,25 +610,54 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       ),
     );
 
-    if (confirmed != true || !context.mounted) return;
+    if (confirmed != true || !context.mounted) return false;
 
     final removeMember = ref.read(removeMemberUseCaseProvider);
     final result = await removeMember(groupId: groupId, userId: userId);
 
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
 
-    result.fold(
+    return result.fold(
       (failure) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.message)));
+        showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: Icon(
+              Icons.warning_amber_rounded,
+              color: Theme.of(context).colorScheme.error,
+              size: 32,
+            ),
+            title: const Text('無法移除成員'),
+            content: Text(_friendlyRemoveError(failure.message)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return false;
       },
       (_) {
         ref.invalidate(groupMembersProvider(groupId));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已移除「$displayName」')),
-        );
+        return true;
       },
     );
+  }
+
+  String _friendlyRemoveError(String raw) {
+    if (raw.contains('尚有未結清帳款')) {
+      // Extract the net amount if present, e.g. "淨額 50.00"
+      final match = RegExp(r'淨額\s*([\d.+-]+)').firstMatch(raw);
+      if (match != null) {
+        return '「此成員」尚有未結清帳款（淨額 ${match.group(1)}），\n請先在帳務總覽中完成結算，再移除此成員。';
+      }
+      return '此成員尚有未結清帳款，\n請先完成結算後再移除。';
+    }
+    if (raw.contains('只有管理員')) return '只有群組管理員可以移除成員。';
+    if (raw.contains('無法移除管理員')) return '無法移除群組管理員。';
+    return '移除成員時發生錯誤，請稍後再試。';
   }
 
   Future<void> _handleLeaveGroup(BuildContext context, WidgetRef ref) async {
