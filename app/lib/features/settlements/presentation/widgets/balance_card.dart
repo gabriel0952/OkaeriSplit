@@ -2,23 +2,32 @@ import 'package:app/features/settlements/domain/entities/settlement_entity.dart'
 import 'package:flutter/material.dart';
 
 class BalanceCard extends StatelessWidget {
-  const BalanceCard({super.key, required this.balances, required this.currency});
+  const BalanceCard({
+    super.key,
+    required this.balances,
+    required this.currency,
+    this.currentUserId,
+  });
 
   final List<BalanceEntity> balances;
   final String currency;
+  final String? currentUserId;
 
   @override
   Widget build(BuildContext context) {
-    double totalReceivable = 0;
-    double totalPayable = 0;
+    // Show only the current user's balance to avoid zero-sum artifacts
+    final myBalance = currentUserId != null
+        ? balances.where((b) => b.userId == currentUserId).firstOrNull
+        : null;
 
-    for (final b in balances) {
-      if (b.netBalance > 0) {
-        totalReceivable += b.netBalance;
-      } else {
-        totalPayable += b.netBalance.abs();
-      }
-    }
+    final double totalReceivable =
+        myBalance != null && myBalance.netBalance > 0
+            ? myBalance.netBalance
+            : 0;
+    final double totalPayable =
+        myBalance != null && myBalance.netBalance < 0
+            ? myBalance.netBalance.abs()
+            : 0;
 
     final net = totalReceivable - totalPayable;
 

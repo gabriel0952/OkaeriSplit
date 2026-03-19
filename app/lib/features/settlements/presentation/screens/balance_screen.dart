@@ -77,7 +77,11 @@ class BalanceScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                BalanceCard(balances: balances, currency: currency),
+                BalanceCard(
+                  balances: balances,
+                  currency: currency,
+                  currentUserId: currentUser?.id,
+                ),
                 const SizedBox(height: 24),
                 Text(
                   '建議轉帳',

@@ -38,9 +38,40 @@ class BalanceSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '個人帳務總覽',
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Text(
+                  '個人帳務總覽',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  tooltip: '計算說明',
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('帳務總覽說明'),
+                        content: const Text(
+                          '應收：各群組中別人欠你的金額之和\n'
+                          '應付：各群組中你欠別人的金額之和\n'
+                          '淨額：應收減去應付，正值代表整體為收款方',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('知道了'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             IntrinsicHeight(
@@ -48,8 +79,7 @@ class BalanceSummaryCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _SummaryColumn(
-                      label: '別人欠你',
-                      hint: '各群組應收之和',
+                      label: '應收',
                       amount: totalReceivable,
                       color: positiveColor,
                       currency: currencyLabel,
@@ -61,8 +91,7 @@ class BalanceSummaryCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: _SummaryColumn(
-                      label: '你欠別人',
-                      hint: '各群組應付之和',
+                      label: '應付',
                       amount: totalPayable,
                       color: negativeColor,
                       currency: currencyLabel,
@@ -74,8 +103,7 @@ class BalanceSummaryCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: _SummaryColumn(
-                      label: '淨差額',
-                      hint: '應收減去應付',
+                      label: '淨額',
                       amount: net,
                       color: net >= 0 ? positiveColor : negativeColor,
                       currency: currencyLabel,
@@ -94,14 +122,12 @@ class BalanceSummaryCard extends StatelessWidget {
 class _SummaryColumn extends StatelessWidget {
   const _SummaryColumn({
     required this.label,
-    required this.hint,
     required this.amount,
     required this.color,
     required this.currency,
   });
 
   final String label;
-  final String hint;
   final double amount;
   final Color color;
   final String currency;
@@ -119,21 +145,15 @@ class _SummaryColumn extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 4),
-        Text(
-          '$currency ${amount.toStringAsFixed(0)}',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          hint,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                fontSize: 10,
-              ),
-          textAlign: TextAlign.center,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '$currency ${amount.toStringAsFixed(0)}',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
         ),
       ],
     );
