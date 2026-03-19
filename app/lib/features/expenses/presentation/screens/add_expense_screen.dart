@@ -858,7 +858,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: Row(
           children: [
             Expanded(
-              child: Text(member.displayName, style: labelStyle),
+              child: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle),
             ),
             SizedBox(
               width: 52,
@@ -918,7 +918,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Expanded(child: Text(member.displayName, style: labelStyle)),
+              Expanded(child: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle)),
               SizedBox(
                 width: 120,
                 child: TextField(
@@ -1115,7 +1115,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 children: members.map((m) {
                   final selected = item.sharedByUserIds.contains(m.userId);
                   return FilterChip(
-                    label: Text(m.displayName, style: const TextStyle(fontSize: 12)),
+                    label: Text(m.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
                     selected: selected,
                     onSelected: (val) {
                       setState(() {

@@ -24,7 +24,7 @@ class MemberAvatar extends StatelessWidget {
               )
             : null,
       ),
-      title: Text(member.displayName),
+      title: Text(member.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: member.isGuest
           ? Chip(
               label: Text(

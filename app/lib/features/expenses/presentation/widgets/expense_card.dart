@@ -63,6 +63,8 @@ class ExpenseCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     '${paidByName ?? expense.paidBy} · ${DateFormat('MM/dd').format(expense.expenseDate)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

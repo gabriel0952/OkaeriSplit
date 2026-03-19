@@ -30,11 +30,15 @@ class DebtRow extends StatelessWidget {
       ),
       title: Text(
         balance.displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
       subtitle: Text(
         '已付 $currency ${balance.totalPaid.toStringAsFixed(0)} / '
         '應分攤 $currency ${balance.totalOwed.toStringAsFixed(0)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,
       ),
       trailing: Row(

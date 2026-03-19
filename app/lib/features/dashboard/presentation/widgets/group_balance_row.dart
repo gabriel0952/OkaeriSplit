@@ -22,6 +22,8 @@ class GroupBalanceRow extends StatelessWidget {
       ),
       title: Text(
         balance.groupName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
       trailing: Text(
