@@ -1723,14 +1723,18 @@ class _MemberChip extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              name,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isSelected
-                    ? (isSingle ? colorScheme.primary : Colors.white)
-                    : colorScheme.onSurface,
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected
+                      ? (isSingle ? colorScheme.primary : Colors.white)
+                      : colorScheme.onSurface,
+                ),
               ),
             ),
             if (isSelected && isSingle) ...[
