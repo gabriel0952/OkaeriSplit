@@ -182,6 +182,7 @@ class ProfileScreen extends ConsumerWidget {
         content: TextField(
           controller: controller,
           autofocus: true,
+          maxLength: 20,
           decoration: const InputDecoration(hintText: '輸入新名稱'),
         ),
         actions: [

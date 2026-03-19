@@ -147,6 +147,7 @@ class _AddGuestMemberDialogState extends ConsumerState<AddGuestMemberDialog> {
                 children: [
                   TextField(
                     controller: _nameController,
+                    maxLength: 20,
                     decoration: const InputDecoration(
                       labelText: '顯示名稱（如：小明）',
                       prefixIcon: Icon(Icons.person_outline),

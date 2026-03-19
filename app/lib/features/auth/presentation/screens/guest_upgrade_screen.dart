@@ -93,6 +93,7 @@ class _GuestUpgradeScreenState extends ConsumerState<GuestUpgradeScreen> {
                 const SizedBox(height: 40),
                 TextFormField(
                   controller: _displayNameController,
+                  maxLength: 20,
                   decoration: const InputDecoration(
                     labelText: '顯示名稱',
                     prefixIcon: Icon(Icons.badge_outlined),
