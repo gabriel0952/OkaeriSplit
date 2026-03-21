@@ -11,6 +11,7 @@ import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/expenses/presentation/widgets/expense_card.dart';
+import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/settlements/domain/entities/settlement_entity.dart';
 import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
@@ -44,6 +45,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
   String? _selectedPayer;
   DateTimeRange? _dateRange;
   bool _isSharing = false;
+  final _shareButtonKey = GlobalKey();
 
   // 群組名稱高度 (headlineMedium) + top padding，滾超過即顯示 toolbar 標題
   static const _collapsedThreshold = 52.0;
@@ -428,22 +430,35 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
 
   Future<void> _handleShareLink(BuildContext context) async {
     setState(() => _isSharing = true);
-    final useCase = ref.read(createShareLinkUseCaseProvider);
-    final result = await useCase(groupId);
-    if (!mounted) return;
-    setState(() => _isSharing = false);
+    try {
+      final useCase = ref.read(createShareLinkUseCaseProvider);
+      final result = await useCase(groupId).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      setState(() => _isSharing = false);
 
-    result.fold(
-      (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分享失敗：${failure.message}')),
-        );
-      },
-      (token) {
-        final url = '${AppConstants.shareDomain}/s/$token';
-        Share.share(url);
-      },
-    );
+      result.fold(
+        (failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('分享失敗：${failure.message}')),
+          );
+        },
+        (token) {
+          final url = '${AppConstants.shareDomain}/s/$token';
+          final box = _shareButtonKey.currentContext
+              ?.findRenderObject() as RenderBox?;
+          final rect = box != null
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null;
+          Share.share(url, sharePositionOrigin: rect);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSharing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('分享失敗：$e')),
+      );
+    }
   }
 
   Future<void> _onRefresh() async {
@@ -507,10 +522,13 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
     // 提前計算總額供固定列使用
     final expensesRaw = expensesAsync.valueOrNull ?? [];
     final filteredExpenses = _applyFilters(expensesRaw);
-    final groupTotal =
-        filteredExpenses.fold<double>(0, (sum, e) => sum + e.amount);
-    final groupCurrency =
-        expensesRaw.isNotEmpty ? expensesRaw.first.currency : '';
+    final groupCurrency = groupAsync.valueOrNull?.currency ?? '';
+    final exchangeRates =
+        ref.watch(groupExchangeRatesProvider(groupId)).valueOrNull ?? [];
+    final groupTotal = filteredExpenses.fold<double>(
+      0,
+      (sum, e) => sum + _convertToBase(e.amount, e.currency, groupCurrency, exchangeRates),
+    );
 
     // 計算欠款區固定高度（供 SliverPersistentHeader 使用）
     final myDebts = currentUserId != null
@@ -611,6 +629,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
                   const SizedBox.shrink(),
             if (!isGuest)
               IconButton(
+                key: _shareButtonKey,
                 icon: _isSharing
                     ? const SizedBox(
                         width: 20,
@@ -799,7 +818,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
                 dailySubtotal = 0;
                 lastDateKey = dateKey;
               }
-              dailySubtotal += expense.amount;
+              dailySubtotal += _convertToBase(expense.amount, expense.currency, groupCurrency, exchangeRates);
               currentExpenses.add(expense);
             }
             if (lastDateKey != null) {
@@ -942,7 +961,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
           ),
           const SizedBox(height: 2),
           Text(
-            '${group.type.label} · ${group.currency}',
+            group.currency,
             style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
@@ -1223,4 +1242,15 @@ class _DateGroup {
   final String label;
   final double subtotal;
   final List<ExpenseEntity> expenses;
+}
+
+double _convertToBase(
+  double amount,
+  String currency,
+  String groupCurrency,
+  List<GroupExchangeRateEntity> rates,
+) {
+  if (currency == groupCurrency || groupCurrency.isEmpty) return amount;
+  final rate = rates.where((r) => r.currency == currency).firstOrNull?.rate;
+  return amount * (rate ?? 1.0);
 }

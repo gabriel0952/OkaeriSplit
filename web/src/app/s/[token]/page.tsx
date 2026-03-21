@@ -34,6 +34,7 @@ interface Expense {
   id: string;
   description: string;
   amount: number;
+  currency: string;
   paid_by: string;
   expense_date: string;
   category: string | null;
@@ -43,6 +44,10 @@ interface Settlement {
   from_user: string;
   to_user: string;
   amount: number;
+}
+interface ExchangeRate {
+  currency: string;
+  rate: number;
 }
 interface SimplifiedDebt {
   fromUserId: string;
@@ -81,6 +86,13 @@ function formatAmount(amount: number, currency: string): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })}`;
+}
+
+/** Convert amount to group base currency using exchange rates */
+function toBase(amount: number, currency: string, groupCurrency: string, rates: ExchangeRate[]): number {
+  if (currency === groupCurrency) return amount;
+  const rate = rates.find(r => r.currency === currency)?.rate ?? 1;
+  return amount * rate;
 }
 
 /** Greedy minimum-transfer debt simplification (mirrors Flutter DebtSimplifier) */
@@ -133,18 +145,22 @@ export default async function SharePage({ params }: Props) {
 
   const groupId = (shareLink as ShareLink).group_id;
 
-  const [{ data: group }, { data: membersRaw }, { data: expensesRaw }, { data: settlementsRaw }] =
+  const [{ data: group }, { data: membersRaw }, { data: expensesRaw }, { data: settlementsRaw }, { data: exchangeRatesRaw }] =
     await Promise.all([
       supabase.from('groups').select('id, name, type, currency, status').eq('id', groupId).single(),
       supabase.from('group_members').select('user_id, profiles(display_name, email)').eq('group_id', groupId),
       supabase
         .from('expenses')
-        .select('id, description, amount, paid_by, expense_date, category, splits:expense_splits(user_id, amount)')
+        .select('id, description, amount, currency, paid_by, expense_date, category, splits:expense_splits(user_id, amount)')
         .eq('group_id', groupId)
         .order('expense_date', { ascending: false }),
       supabase
         .from('settlements')
         .select('from_user, to_user, amount')
+        .eq('group_id', groupId),
+      supabase
+        .from('group_exchange_rates')
+        .select('currency, rate')
         .eq('group_id', groupId),
     ]);
 
@@ -153,6 +169,7 @@ export default async function SharePage({ params }: Props) {
   const members: Member[] = (membersRaw ?? []) as unknown as Member[];
   const expenses: Expense[] = (expensesRaw ?? []) as unknown as Expense[];
   const settlements: Settlement[] = (settlementsRaw ?? []) as unknown as Settlement[];
+  const exchangeRates: ExchangeRate[] = (exchangeRatesRaw ?? []) as ExchangeRate[];
 
   // Compute net balances (expenses + settlements)
   const memberMap = new Map<string, string>(members.map((m) => [m.user_id, memberName(m)]));
@@ -160,9 +177,11 @@ export default async function SharePage({ params }: Props) {
   members.forEach((m) => balances.set(m.user_id, 0));
 
   for (const exp of expenses) {
-    balances.set(exp.paid_by, (balances.get(exp.paid_by) ?? 0) + exp.amount);
+    const converted = toBase(exp.amount, exp.currency, g.currency, exchangeRates);
+    balances.set(exp.paid_by, (balances.get(exp.paid_by) ?? 0) + converted);
     for (const split of exp.splits) {
-      balances.set(split.user_id, (balances.get(split.user_id) ?? 0) - split.amount);
+      const splitConverted = toBase(split.amount, exp.currency, g.currency, exchangeRates);
+      balances.set(split.user_id, (balances.get(split.user_id) ?? 0) - splitConverted);
     }
   }
   // Adjust for recorded settlements: payer balance increases (they paid out), receiver decreases
@@ -172,7 +191,7 @@ export default async function SharePage({ params }: Props) {
   }
 
   const simplifiedDebts = simplifyDebts(balances);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalExpenses = expenses.reduce((s, e) => s + toBase(e.amount, e.currency, g.currency, exchangeRates), 0);
   const isArchived = g.status === 'archived';
 
   // memberMap as plain object for client component

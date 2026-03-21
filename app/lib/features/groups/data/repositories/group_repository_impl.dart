@@ -2,6 +2,7 @@ import 'package:app/core/errors/failures.dart';
 import 'package:app/features/groups/data/datasources/hive_group_datasource.dart';
 import 'package:app/features/groups/data/datasources/supabase_group_datasource.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
+import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:app/features/groups/domain/repositories/group_repository.dart';
 import 'package:fpdart/fpdart.dart';
 
@@ -156,6 +157,71 @@ class GroupRepositoryImpl implements GroupRepository {
     try {
       final token = await _remote.createShareLink(groupId);
       return Right(token);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<List<GroupExchangeRateEntity>>> getExchangeRates(
+    String groupId,
+  ) async {
+    try {
+      final rates = await _remote.getExchangeRates(groupId);
+      return Right(rates);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> setExchangeRate(
+    String groupId,
+    String currency,
+    double rate,
+  ) async {
+    try {
+      await _remote.setExchangeRate(groupId, currency, rate);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> deleteExchangeRate(
+    String groupId,
+    String currency,
+  ) async {
+    try {
+      await _remote.deleteExchangeRate(groupId, currency);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> updateGroupName(String groupId, String name) async {
+    try {
+      await _remote.updateGroupName(groupId, name);
+      // Update Hive cache so offline reads reflect the new name.
+      final cached = _local.getGroups();
+      final updated = cached.map((g) {
+        if (g.id != groupId) return g;
+        return GroupEntity(
+          id: g.id,
+          name: name,
+          type: g.type,
+          currency: g.currency,
+          inviteCode: g.inviteCode,
+          createdBy: g.createdBy,
+          createdAt: g.createdAt,
+          status: g.status,
+        );
+      }).toList();
+      await _local.saveGroups(updated);
+      return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }

@@ -1,5 +1,6 @@
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
+import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseGroupDataSource {
@@ -129,6 +130,48 @@ class SupabaseGroupDataSource {
       params: {'p_group_id': groupId},
     );
     return response as String;
+  }
+
+  Future<void> updateGroupName(String groupId, String name) async {
+    await _client
+        .from('groups')
+        .update({'name': name})
+        .eq('id', groupId);
+  }
+
+  Future<List<GroupExchangeRateEntity>> getExchangeRates(String groupId) async {
+    final response = await _client
+        .from('group_exchange_rates')
+        .select('group_id, currency, rate')
+        .eq('group_id', groupId);
+    return (response as List).map((row) => GroupExchangeRateEntity(
+          groupId: row['group_id'] as String,
+          currency: row['currency'] as String,
+          rate: (row['rate'] as num).toDouble(),
+        )).toList();
+  }
+
+  Future<void> setExchangeRate(
+    String groupId,
+    String currency,
+    double rate,
+  ) async {
+    final userId = _client.auth.currentUser?.id;
+    await _client.from('group_exchange_rates').upsert({
+      'group_id': groupId,
+      'currency': currency,
+      'rate': rate,
+      'updated_by': userId,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'group_id,currency');
+  }
+
+  Future<void> deleteExchangeRate(String groupId, String currency) async {
+    await _client
+        .from('group_exchange_rates')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('currency', currency);
   }
 
   GroupEntity _mapGroup(Map<String, dynamic> data) {

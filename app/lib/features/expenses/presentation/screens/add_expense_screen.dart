@@ -74,9 +74,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   bool _splitTypeExpanded = false;
   bool _moreOptionsExpanded = false;
 
-  static const _supportedCurrencies = [
-    'TWD', 'USD', 'JPY', 'EUR', 'GBP', 'KRW', 'CNY',
-  ];
+  // Available currencies are built dynamically in the build method
+  // from the group base currency + currencies with exchange rates set.
 
   @override
   void dispose() {
@@ -120,6 +119,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   Widget build(BuildContext context) {
     final membersAsync = ref.watch(groupMembersProvider(widget.groupId));
     final groupAsync = ref.watch(groupDetailProvider(widget.groupId));
+    final exchangeRatesAsync = ref.watch(groupExchangeRatesProvider(widget.groupId));
     final currentUser = ref.watch(authStateProvider).valueOrNull;
 
     final isOnline = ref.watch(isOnlineProvider);
@@ -265,9 +265,27 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
           final groupCurrency =
               groupAsync.valueOrNull?.currency ?? AppConstants.defaultCurrency;
+          final exchangeRateCurrencies = exchangeRatesAsync.valueOrNull
+                  ?.map((r) => r.currency)
+                  .toList() ??
+              [];
+          final availableCurrencies = [
+            groupCurrency,
+            ...exchangeRateCurrencies,
+          ];
           _selectedCurrency ??= groupCurrency;
+          // Reset to group currency if the previously selected currency
+          // no longer has an exchange rate configured.
+          if (!availableCurrencies.contains(_selectedCurrency)) {
+            _selectedCurrency = groupCurrency;
+          }
 
-          return _buildLayout(context, members, _selectedCurrency!);
+          return _buildLayout(
+            context,
+            members,
+            _selectedCurrency!,
+            availableCurrencies,
+          );
         },
       ),
     );
@@ -278,6 +296,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     BuildContext context,
     List<GroupMemberEntity> members,
     String currency,
+    List<String> availableCurrencies,
   ) {
     final customCategoriesAsync = ref.watch(groupCategoriesProvider(widget.groupId));
     final customCategories = customCategoriesAsync.valueOrNull ?? [];
@@ -291,7 +310,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       children: [
         const OfflineBanner(),
         // [A] Amount section — fixed at top
-        _buildAmountSection(context, currency),
+        _buildAmountSection(context, currency, availableCurrencies),
 
         // [B] Scrollable form body
         Expanded(
@@ -327,7 +346,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
   // ─── [A] Amount Section ─────────────────────────────────────────────────
 
-  Widget _buildAmountSection(BuildContext context, String currency) {
+  Widget _buildAmountSection(
+    BuildContext context,
+    String currency,
+    List<String> availableCurrencies,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
@@ -341,7 +364,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           children: [
             // Currency chip — tappable to change currency
             GestureDetector(
-              onTap: () => _showCurrencyPicker(context),
+              onTap: () => _showCurrencyPicker(context, availableCurrencies),
               child: Container(
                 padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
                 decoration: BoxDecoration(
@@ -415,13 +438,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     );
   }
 
-  void _showCurrencyPicker(BuildContext context) {
+  void _showCurrencyPicker(BuildContext context, List<String> availableCurrencies) {
+    if (availableCurrencies.length <= 1) return;
     showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: _supportedCurrencies.map((c) => ListTile(
+          children: availableCurrencies.map((c) => ListTile(
             title: Text(c),
             trailing: _selectedCurrency == c
                 ? Icon(Icons.check_rounded,

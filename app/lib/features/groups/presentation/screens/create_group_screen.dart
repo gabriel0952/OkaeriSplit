@@ -14,7 +14,6 @@ class CreateGroupScreen extends ConsumerStatefulWidget {
 class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  GroupType _selectedType = GroupType.roommate;
   String _selectedCurrency = AppConstants.defaultCurrency;
   bool _isLoading = false;
   String? _errorMessage;
@@ -38,7 +37,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     final createGroup = ref.read(createGroupUseCaseProvider);
     final result = await createGroup(
       name: _nameController.text.trim(),
-      type: _selectedType.name,
+      type: GroupType.other.name,
       currency: _selectedCurrency,
     );
 
@@ -127,38 +126,6 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                               return '請輸入群組名稱';
                             }
                             return null;
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // 群組類型
-                    Text(
-                      '群組類型',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 6),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: SegmentedButton<GroupType>(
-                          segments: GroupType.values
-                              .where((t) => t != GroupType.other)
-                              .map(
-                                (type) => ButtonSegment(
-                                  value: type,
-                                  label: Text(type.label),
-                                ),
-                              )
-                              .toList(),
-                          selected: {_selectedType},
-                          onSelectionChanged: (selected) {
-                            setState(() => _selectedType = selected.first);
                           },
                         ),
                       ),

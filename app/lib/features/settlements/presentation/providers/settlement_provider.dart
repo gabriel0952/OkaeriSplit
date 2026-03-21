@@ -1,6 +1,5 @@
 import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
-import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/settlements/data/datasources/supabase_settlement_datasource.dart';
 import 'package:app/features/settlements/data/repositories/settlement_repository_impl.dart';
 import 'package:app/features/settlements/domain/entities/settlement_entity.dart';
@@ -85,20 +84,10 @@ final overallBalancesProvider =
   final getOverallBalances = ref.watch(getOverallBalancesUseCaseProvider);
   final result = await getOverallBalances(currentUser.id);
 
-  final groups = ref.watch(groupsProvider).valueOrNull ?? [];
-  final currencyMap = {for (final g in groups) g.id: g.currency};
-
+  // RPC now returns the group's base currency directly, with exchange rate
+  // conversion already applied — no client-side currency fixup needed.
   return result.fold(
-    // On error return empty instead of throwing — dashboard should not crash.
     (failure) => [],
-    (balances) => balances.map((b) {
-      if (b.currency != 'TWD' || !currencyMap.containsKey(b.groupId)) return b;
-      return OverallBalanceEntity(
-        groupId: b.groupId,
-        groupName: b.groupName,
-        netBalance: b.netBalance,
-        currency: currencyMap[b.groupId] ?? b.currency,
-      );
-    }).toList(),
+    (balances) => balances,
   );
 });

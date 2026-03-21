@@ -17,6 +17,11 @@ import 'package:app/features/groups/domain/usecases/invite_user.dart';
 import 'package:app/features/groups/domain/usecases/leave_group.dart';
 import 'package:app/features/groups/domain/usecases/remove_member.dart';
 import 'package:app/features/groups/domain/usecases/search_users.dart';
+import 'package:app/features/groups/domain/usecases/update_group_name.dart';
+import 'package:app/features/groups/domain/usecases/get_exchange_rates.dart';
+import 'package:app/features/groups/domain/usecases/set_exchange_rate.dart';
+import 'package:app/features/groups/domain/usecases/delete_exchange_rate.dart';
+import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Infrastructure
@@ -84,6 +89,22 @@ final createShareLinkUseCaseProvider = Provider<CreateShareLink>((ref) {
   return CreateShareLink(ref.watch(groupRepositoryProvider));
 });
 
+final updateGroupNameUseCaseProvider = Provider<UpdateGroupName>((ref) {
+  return UpdateGroupName(ref.watch(groupRepositoryProvider));
+});
+
+final getExchangeRatesUseCaseProvider = Provider<GetExchangeRates>((ref) {
+  return GetExchangeRates(ref.watch(groupRepositoryProvider));
+});
+
+final setExchangeRateUseCaseProvider = Provider<SetExchangeRate>((ref) {
+  return SetExchangeRate(ref.watch(groupRepositoryProvider));
+});
+
+final deleteExchangeRateUseCaseProvider = Provider<DeleteExchangeRate>((ref) {
+  return DeleteExchangeRate(ref.watch(groupRepositoryProvider));
+});
+
 // Presentation providers
 final groupsProvider = FutureProvider<List<GroupEntity>>((ref) async {
   // Re-fetch automatically when the logged-in user changes (e.g. after logout/re-login).
@@ -112,6 +133,19 @@ final groupDetailProvider = FutureProvider.family<GroupEntity, String>((
     (group) => group,
   );
 });
+
+final groupExchangeRatesProvider =
+    FutureProvider.family<List<GroupExchangeRateEntity>, String>((
+      ref,
+      groupId,
+    ) async {
+      final getExchangeRates = ref.watch(getExchangeRatesUseCaseProvider);
+      final result = await getExchangeRates(groupId);
+      return result.fold(
+        (failure) => throw Exception(failure.message),
+        (rates) => rates,
+      );
+    });
 
 final groupMembersProvider =
     FutureProvider.family<List<GroupMemberEntity>, String>((

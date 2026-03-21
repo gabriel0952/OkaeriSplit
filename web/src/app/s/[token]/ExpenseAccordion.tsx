@@ -48,6 +48,7 @@ interface ExpenseItem {
   id: string;
   description: string;
   amount: number;
+  currency: string;
   paid_by: string;
   expense_date: string;
   category: string | null;
@@ -149,7 +150,7 @@ export default function ExpenseAccordion({ expenses, memberMap, currency }: Prop
                 {/* Amount + expand icon */}
                 <Stack alignItems="flex-end" spacing={0.25} sx={{ flexShrink: 0 }}>
                   <Typography variant="body2" fontWeight={600}>
-                    {formatAmount(exp.amount, currency)}
+                    {formatAmount(exp.amount, exp.currency)}
                   </Typography>
                   <Box sx={{ color: 'text.disabled', display: 'flex' }}>
                     {isOpen ? (
@@ -218,7 +219,7 @@ export default function ExpenseAccordion({ expenses, memberMap, currency }: Prop
                                   {memberMap[split.user_id] ?? '未知'}
                                 </Typography>
                                 <Typography variant="body2" fontWeight={500}>
-                                  {formatAmount(split.amount, currency)}
+                                  {formatAmount(split.amount, exp.currency)}
                                 </Typography>
                               </Box>
                             ))}

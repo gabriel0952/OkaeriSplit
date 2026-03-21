@@ -30,6 +30,7 @@ class GroupDetailScreen extends ConsumerStatefulWidget {
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   String get groupId => widget.groupId;
   bool _isSharing = false;
+  final _shareButtonKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +84,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
           // Share button (non-guest only)
           if (!isGuest)
             IconButton(
+              key: _shareButtonKey,
               icon: _isSharing
                   ? const SizedBox(
                       width: 20,
@@ -496,22 +498,35 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
   Future<void> _handleShareLink(BuildContext context) async {
     setState(() => _isSharing = true);
-    final useCase = ref.read(createShareLinkUseCaseProvider);
-    final result = await useCase(groupId);
-    if (!mounted) return;
-    setState(() => _isSharing = false);
+    try {
+      final useCase = ref.read(createShareLinkUseCaseProvider);
+      final result = await useCase(groupId).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      setState(() => _isSharing = false);
 
-    result.fold(
-      (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分享失敗：${failure.message}')),
-        );
-      },
-      (token) {
-        final url = '${AppConstants.shareDomain}/s/$token';
-        Share.share(url);
-      },
-    );
+      result.fold(
+        (failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('分享失敗：${failure.message}')),
+          );
+        },
+        (token) {
+          final url = '${AppConstants.shareDomain}/s/$token';
+          final box = _shareButtonKey.currentContext
+              ?.findRenderObject() as RenderBox?;
+          final rect = box != null
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null;
+          Share.share(url, sharePositionOrigin: rect);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSharing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('分享失敗：$e')),
+      );
+    }
   }
 
   Future<void> _handleGuestExit(BuildContext context, WidgetRef ref) async {

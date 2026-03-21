@@ -2,6 +2,7 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/groups/presentation/widgets/add_guest_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/invite_member_dialog.dart';
@@ -52,6 +53,22 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    // ── 群組名稱 Section ────────────────────────────────
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.group_outlined),
+                        title: Text(group.name),
+                        trailing: isGuest
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                onPressed: () =>
+                                    _showEditNameDialog(context, group.name),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
                     // ── 成員 Section ───────────────────────────────────
                     Row(
                       children: [
@@ -202,6 +219,32 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     ),
                     const SizedBox(height: 24),
 
+                    // ── 幣別匯率 Section ────────────────────────────────
+                    Row(
+                      children: [
+                        Text(
+                          '幣別匯率',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        if (!isGuest)
+                          TextButton.icon(
+                            onPressed: () => _showAddExchangeRateSheet(
+                              context,
+                              group.currency,
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('新增匯率'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildExchangeRatesSection(context, group.currency, isGuest),
+                    const SizedBox(height: 24),
+
                     // ── Guest 操作區 ────────────────────────────────────
                     if (isGuest) ...[
                       FilledButton.icon(
@@ -284,6 +327,234 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _showEditNameDialog(BuildContext context, String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    String? error;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('編輯群組名稱'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: '群組名稱',
+              errorText: error,
+            ),
+            onChanged: (_) {
+              if (error != null) setDialogState(() => error = null);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) {
+                  setDialogState(() => error = '請輸入群組名稱');
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('確認'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final newName = controller.text.trim();
+    controller.dispose();
+    if (confirmed != true || !context.mounted) return;
+    if (newName == currentName) return;
+
+    final updateGroupName = ref.read(updateGroupNameUseCaseProvider);
+    final result = await updateGroupName(groupId, newName);
+
+    if (!context.mounted) return;
+    result.fold(
+      (failure) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failure.message))),
+      (_) {
+        ref.invalidate(groupDetailProvider(groupId));
+        ref.invalidate(groupsProvider);
+      },
+    );
+  }
+
+  // ─── Exchange rate helpers ────────────────────────────────────────────────
+
+  Widget _buildExchangeRatesSection(
+    BuildContext context,
+    String groupCurrency,
+    bool isGuest,
+  ) {
+    final ratesAsync = ref.watch(groupExchangeRatesProvider(groupId));
+    return ratesAsync.when(
+      loading: () => const AppLoadingWidget(),
+      error: (e, _) => AppErrorWidget(
+        message: e.toString(),
+        onRetry: () => ref.invalidate(groupExchangeRatesProvider(groupId)),
+      ),
+      data: (rates) {
+        if (rates.isEmpty) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '尚未設定任何匯率，記帳只能使用群組幣別 $groupCurrency',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          );
+        }
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: rates.map((rate) {
+              final tile = ListTile(
+                leading: const Icon(Icons.currency_exchange),
+                title: Text('1 ${rate.currency} = ${rate.rate} $groupCurrency'),
+                onTap: isGuest
+                    ? null
+                    : () => _showEditExchangeRateSheet(
+                          context,
+                          groupCurrency,
+                          rate,
+                        ),
+              );
+              if (isGuest) return tile;
+              return Dismissible(
+                key: Key('rate_${rate.currency}'),
+                direction: DismissDirection.endToStart,
+                background: ColoredBox(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 20),
+                      child: Icon(
+                        Icons.delete_outline,
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                ),
+                confirmDismiss: (_) => _deleteExchangeRate(
+                  context,
+                  rate.currency,
+                ),
+                child: tile,
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _deleteExchangeRate(
+    BuildContext context,
+    String currency,
+  ) async {
+    final deleteRate = ref.read(deleteExchangeRateUseCaseProvider);
+    final result = await deleteRate(groupId, currency);
+    if (!context.mounted) return false;
+    return result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(failure.message)));
+        return false;
+      },
+      (_) {
+        ref.invalidate(groupExchangeRatesProvider(groupId));
+        return true;
+      },
+    );
+  }
+
+  static const _availableCurrencies = [
+    'USD', 'JPY', 'EUR', 'GBP', 'KRW', 'CNY', 'HKD', 'SGD', 'THB', 'AUD',
+  ];
+
+  Future<void> _showAddExchangeRateSheet(
+    BuildContext context,
+    String groupCurrency,
+  ) async {
+    final rates = ref.read(groupExchangeRatesProvider(groupId)).valueOrNull ?? [];
+    final existingCurrencies = rates.map((r) => r.currency).toSet();
+    final available = _availableCurrencies
+        .where((c) => c != groupCurrency && !existingCurrencies.contains(c))
+        .toList();
+
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('所有支援的幣別均已設定匯率')),
+      );
+      return;
+    }
+
+    await _showExchangeRateSheet(
+      context: context,
+      groupCurrency: groupCurrency,
+      initialCurrency: available.first,
+      availableCurrencies: available,
+      initialRate: '',
+      title: '新增匯率',
+    );
+  }
+
+  Future<void> _showEditExchangeRateSheet(
+    BuildContext context,
+    String groupCurrency,
+    GroupExchangeRateEntity rate,
+  ) async {
+    await _showExchangeRateSheet(
+      context: context,
+      groupCurrency: groupCurrency,
+      initialCurrency: rate.currency,
+      availableCurrencies: [rate.currency],
+      initialRate: rate.rate.toStringAsFixed(
+        rate.rate.truncateToDouble() == rate.rate ? 0 : 4,
+      ),
+      title: '編輯匯率',
+    );
+  }
+
+  Future<void> _showExchangeRateSheet({
+    required BuildContext context,
+    required String groupCurrency,
+    required String initialCurrency,
+    required List<String> availableCurrencies,
+    required String initialRate,
+    required String title,
+  }) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ExchangeRateFormSheet(
+        groupId: groupId,
+        groupCurrency: groupCurrency,
+        initialCurrency: initialCurrency,
+        availableCurrencies: availableCurrencies,
+        initialRate: initialRate,
+        title: title,
+      ),
+    );
+
+    // Sheet is fully dismissed at this point — safe to trigger parent rebuild.
+    if (saved == true && mounted) {
+      ref.invalidate(groupExchangeRatesProvider(groupId));
+    }
   }
 
   Future<bool> _tryRemoveMember(
@@ -573,5 +844,145 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         SnackBar(content: Text('操作失敗：$e')),
       );
     }
+  }
+}
+
+// ─── Exchange rate form sheet ────────────────────────────────────────────────
+
+class _ExchangeRateFormSheet extends ConsumerStatefulWidget {
+  const _ExchangeRateFormSheet({
+    required this.groupId,
+    required this.groupCurrency,
+    required this.initialCurrency,
+    required this.availableCurrencies,
+    required this.initialRate,
+    required this.title,
+  });
+
+  final String groupId;
+  final String groupCurrency;
+  final String initialCurrency;
+  final List<String> availableCurrencies;
+  final String initialRate;
+  final String title;
+
+  @override
+  ConsumerState<_ExchangeRateFormSheet> createState() =>
+      _ExchangeRateFormSheetState();
+}
+
+class _ExchangeRateFormSheetState
+    extends ConsumerState<_ExchangeRateFormSheet> {
+  late String _selectedCurrency;
+  late final TextEditingController _rateController;
+  String? _rateError;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCurrency = widget.initialCurrency;
+    _rateController = TextEditingController(text: widget.initialRate);
+  }
+
+  @override
+  void dispose() {
+    _rateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    final rateValue = double.tryParse(_rateController.text);
+    if (rateValue == null || rateValue <= 0) {
+      setState(() => _rateError = '請輸入有效的正數匯率');
+      return;
+    }
+    setState(() => _isSaving = true);
+
+    final setRate = ref.read(setExchangeRateUseCaseProvider);
+    final result =
+        await setRate(widget.groupId, _selectedCurrency, rateValue);
+
+    if (!mounted) return;
+    result.fold(
+      (failure) => setState(() {
+        _rateError = failure.message;
+        _isSaving = false;
+      }),
+      (_) => Navigator.of(context).pop(true),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.title,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          if (widget.availableCurrencies.length > 1) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _selectedCurrency,
+              decoration: const InputDecoration(
+                labelText: '外幣',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.availableCurrencies
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedCurrency = v);
+              },
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            Text(
+              '外幣：$_selectedCurrency',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: _rateController,
+            autofocus: true,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: '匯率',
+              hintText: '例：32.5',
+              helperText:
+                  '1 $_selectedCurrency = ? ${widget.groupCurrency}',
+              errorText: _rateError,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              if (_rateError != null) setState(() => _rateError = null);
+            },
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _isSaving ? null : _handleSave,
+            child: _isSaving
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('儲存'),
+          ),
+        ],
+      ),
+    );
   }
 }
