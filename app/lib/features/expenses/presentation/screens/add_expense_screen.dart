@@ -611,7 +611,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         if (amount > 0 && count > 0) {
           final perPerson = SplitCalculator.calculateEqualSplits(amount, count);
           final perPersonAmt = perPerson.isNotEmpty ? perPerson.first : 0.0;
-          summary = '平均分給 $count 人，每人 \$${perPersonAmt.toStringAsFixed(2)}';
+          summary = '平均分給 $count 人，每人 ${_selectedCurrency} ${perPersonAmt.toStringAsFixed(2)}';
         } else {
           summary = '平均分給 $count 人';
         }
@@ -681,53 +681,57 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               ),
         ),
         children: [
-          // Task 6.7: RadioGroup four options (Flutter 3.32+ API)
-          RadioGroup<SplitType>(
-            groupValue: _splitType,
-            onChanged: (v) {
-              if (v != null) setState(() => _splitType = v);
-            },
-            child: Column(
-              children: SplitType.values.map((type) {
-                return RadioListTile<SplitType>(
-                  value: type,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(type.label),
-                  dense: true,
-                );
-              }).toList(),
-            ),
+          const SizedBox(height: 4),
+
+          // ── 分帳方式選擇器（SegmentedButton）────────────────────────────
+          SegmentedButton<SplitType>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: SplitType.equal, label: Text('均分')),
+              ButtonSegment(value: SplitType.customRatio, label: Text('比例')),
+              ButtonSegment(value: SplitType.fixedAmount, label: Text('金額')),
+              ButtonSegment(value: SplitType.itemized, label: Text('項目')),
+            ],
+            selected: {_splitType},
+            onSelectionChanged: (set) =>
+                setState(() => _splitType = set.first),
           ),
 
-          // Task 6.8: Inline inputs for non-equal split types
+          const SizedBox(height: 16),
+
+          // ── 各分帳方式內容區 ─────────────────────────────────────────────
+          if (_splitType == SplitType.equal) ...[
+            ..._buildEqualSplitDisplay(context, members, amount),
+          ],
           if (_splitType == SplitType.customRatio) ...[
-            const SizedBox(height: 8),
             ..._buildRatioInputs(context, members, amount),
           ],
           if (_splitType == SplitType.fixedAmount) ...[
-            const SizedBox(height: 8),
             ..._buildFixedAmountInputs(context, members, amount),
           ],
           if (_splitType == SplitType.itemized) ...[
-            const SizedBox(height: 8),
             ..._buildItemizedList(members),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _itemEntries.add(_ItemEntry(
-                    nameController: TextEditingController(),
-                    amountController: TextEditingController(),
-                    sharedByUserIds: members.map((m) => m.userId).toSet(),
-                  ));
-                });
-              },
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('新增品項'),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _itemEntries.add(_ItemEntry(
+                      nameController: TextEditingController(),
+                      amountController: TextEditingController(),
+                      sharedByUserIds:
+                          members.map((m) => m.userId).toSet(),
+                    ));
+                  });
+                },
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('新增品項'),
+              ),
             ),
             if (amount > 0) _buildItemizedHint(amount),
-            const SizedBox(height: 8),
           ],
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -885,7 +889,51 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     );
   }
 
-  // ─── Split Input Helpers (logic unchanged) ───────────────────────────────
+  // ─── Split Input Helpers ──────────────────────────────────────────────────
+
+  /// 均分：唯讀顯示每人分攤金額，版面與 ratio/fixed 一致
+  List<Widget> _buildEqualSplitDisplay(
+    BuildContext context,
+    List<GroupMemberEntity> members,
+    double amount,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final count = _selectedMemberIds.length;
+    final splits = amount > 0 && count > 0
+        ? SplitCalculator.calculateEqualSplits(amount, count)
+        : <double>[];
+
+    final selectedMembers =
+        members.where((m) => _selectedMemberIds.contains(m.userId)).toList();
+
+    return selectedMembers.asMap().entries.map((entry) {
+      final member = entry.value;
+      final splitAmt =
+          entry.key < splits.length ? splits[entry.key] : 0.0;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                resolveDisplayName(members, member),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              amount > 0 ? '${_selectedCurrency} ${splitAmt.toStringAsFixed(2)}' : '',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
 
   List<Widget> _buildRatioInputs(
     BuildContext context,
@@ -897,8 +945,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       borderRadius: BorderRadius.circular(6),
       borderSide: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
     );
-    const labelStyle = TextStyle(fontSize: 13);
-    const fieldStyle = TextStyle(fontSize: 13);
 
     final ratios = <String, int>{};
     for (final id in _selectedMemberIds) {
@@ -908,31 +954,28 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         ? SplitCalculator.calculateRatioSplits(amount, ratios)
         : <String, double>{};
 
-    // Right-side total: 52 (field) + 8 (gap) + 60 (calc) = 120px
-    // Fixed amount uses the same 120px so the name column never shifts.
     return members.map((member) {
       final isSelected = _selectedMemberIds.contains(member.userId);
       if (!isSelected) return const SizedBox.shrink();
       final splitAmount = ratioSplits[member.userId] ?? 0.0;
 
       return Padding(
-        padding: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           children: [
             Expanded(
-              child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle),
+              child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             SizedBox(
-              width: 52,
+              width: 64,
               child: TextField(
                 controller: _ratioControllers[member.userId],
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                style: fieldStyle,
                 decoration: InputDecoration(
                   isDense: true,
                   contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                   border: inputBorder,
                   enabledBorder: inputBorder,
                   focusedBorder: OutlineInputBorder(
@@ -945,11 +988,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             ),
             const SizedBox(width: 8),
             SizedBox(
-              width: 60,
+              width: 76,
               child: Text(
-                amount > 0 ? '\$${splitAmount.toStringAsFixed(2)}' : '',
+                amount > 0 ? '${_selectedCurrency} ${splitAmount.toStringAsFixed(2)}' : '',
                 textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
             ),
           ],
@@ -968,32 +1011,28 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       borderRadius: BorderRadius.circular(6),
       borderSide: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
     );
-    const labelStyle = TextStyle(fontSize: 13);
-    const fieldStyle = TextStyle(fontSize: 13);
 
     return [
       ...members.map((member) {
         final isSelected = _selectedMemberIds.contains(member.userId);
         if (!isSelected) return const SizedBox.shrink();
-        // Right-side total: 120px — same as ratio mode so name column is stable.
         return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(
             children: [
-              Expanded(child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis, style: labelStyle)),
+              Expanded(child: Text(resolveDisplayName(members, member), maxLines: 1, overflow: TextOverflow.ellipsis)),
               SizedBox(
-                width: 120,
+                width: 136,
                 child: TextField(
                   controller: _fixedAmountControllers[member.userId],
                   focusNode: _fixedAmountFocusNodes[member.userId],
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.right,
-                  style: fieldStyle,
                   decoration: InputDecoration(
                     isDense: true,
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    prefixText: '\$ ',
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    prefixText: '${_selectedCurrency} ',
                     border: inputBorder,
                     enabledBorder: inputBorder,
                     focusedBorder: OutlineInputBorder(
@@ -1033,8 +1072,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       padding: const EdgeInsets.only(top: 4),
       child: Text(
         diff > 0
-            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
-            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+            ? '還差 ${_selectedCurrency} ${diff.toStringAsFixed(2)} 未分配'
+            : '超出 ${_selectedCurrency} ${diff.abs().toStringAsFixed(2)}',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 13,
@@ -1129,7 +1168,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       decoration: InputDecoration(
                         labelText: '金額',
                         labelStyle: const TextStyle(fontSize: 12),
-                        prefixText: '\$ ',
+                        prefixText: '${_selectedCurrency} ',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 6),
@@ -1224,8 +1263,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         diff > 0
-            ? '還差 \$${diff.toStringAsFixed(2)} 未分配'
-            : '超出 \$${diff.abs().toStringAsFixed(2)}',
+            ? '還差 ${_selectedCurrency} ${diff.toStringAsFixed(2)} 未分配'
+            : '超出 ${_selectedCurrency} ${diff.abs().toStringAsFixed(2)}',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 13,
@@ -1333,67 +1372,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   // ─── Category Dialogs ────────────────────────────────────────────────────
 
   Future<void> _showAddCategoryDialog(BuildContext context) async {
-    final nameController = TextEditingController();
-    String? selectedIcon;
-
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('新增自訂分類'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: '分類名稱',
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('圖示：'),
-                  const SizedBox(width: 8),
-                  if (selectedIcon != null)
-                    Icon(resolveIcon(selectedIcon!), size: 24),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () async {
-                      final icon = await showDialog<String>(
-                        context: context,
-                        builder: (_) => const IconPickerDialog(),
-                      );
-                      if (icon != null) {
-                        setDialogState(() => selectedIcon = icon);
-                      }
-                    },
-                    child: Text(selectedIcon == null ? '選擇圖示' : '更換'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isNotEmpty && selectedIcon != null) {
-                  Navigator.of(context).pop({
-                    'name': name,
-                    'icon': selectedIcon!,
-                  });
-                }
-              },
-              child: const Text('新增'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => const _AddCategoryDialog(),
     );
 
     if (result != null && mounted) {
@@ -1875,6 +1856,89 @@ class _AttachmentThumbnail extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── 新增自訂分類 Dialog ───────────────────────────────────────────────────────
+class _AddCategoryDialog extends StatefulWidget {
+  const _AddCategoryDialog();
+
+  @override
+  State<_AddCategoryDialog> createState() => _AddCategoryDialogState();
+}
+
+class _AddCategoryDialogState extends State<_AddCategoryDialog> {
+  late final TextEditingController _nameController;
+  String? _selectedIcon;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickIcon() async {
+    final icon = await showDialog<String>(
+      context: context,
+      builder: (_) => const IconPickerDialog(),
+    );
+    if (icon != null && mounted) {
+      setState(() => _selectedIcon = icon);
+    }
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isNotEmpty && _selectedIcon != null) {
+      Navigator.of(context).pop({'name': name, 'icon': _selectedIcon!});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('新增自訂分類'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: '分類名稱'),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Text('圖示：'),
+              const SizedBox(width: 8),
+              if (_selectedIcon != null)
+                Icon(resolveIcon(_selectedIcon!), size: 24),
+              const Spacer(),
+              TextButton(
+                onPressed: _pickIcon,
+                child: Text(_selectedIcon == null ? '選擇圖示' : '更換'),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: _submit,
+          child: const Text('新增'),
         ),
       ],
     );

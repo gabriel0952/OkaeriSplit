@@ -226,55 +226,9 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('刪除帳號'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '此操作無法復原。您的所有資料將被永久刪除。',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('請輸入「刪除」以確認：'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: '刪除',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                TextButton(
-                  onPressed: controller.text.trim() == '刪除'
-                      ? () => Navigator.of(context).pop(true)
-                      : null,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                  child: const Text('確認刪除'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => const _DeleteAccountDialog(),
     );
 
     if (confirmed != true || !context.mounted) return;
@@ -347,6 +301,73 @@ class ProfileScreen extends ConsumerWidget {
           SnackBar(content: Text('已更新預設幣別為 $selected')),
         );
       },
+    );
+  }
+}
+
+// ── 刪除帳號確認 Dialog ────────────────────────────────────────────────────────
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canConfirm = _controller.text.trim() == '刪除';
+    return AlertDialog(
+      title: const Text('刪除帳號'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '此操作無法復原。您的所有資料將被永久刪除。',
+            style: TextStyle(color: Colors.red),
+          ),
+          const SizedBox(height: 16),
+          const Text('請輸入「刪除」以確認：'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: '刪除',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: canConfirm ? () => Navigator.of(context).pop(true) : null,
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('確認刪除'),
+        ),
+      ],
     );
   }
 }

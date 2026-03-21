@@ -38,13 +38,6 @@ class BalanceScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('帳務總覽'),
-        actions: [
-          IconButton(
-            onPressed: () => context.push('/groups/$groupId/settlements'),
-            icon: const Icon(Icons.history),
-            tooltip: '結算歷史',
-          ),
-        ],
       ),
       body: Column(
         children: [

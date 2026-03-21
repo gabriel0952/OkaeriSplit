@@ -15,36 +15,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: AppConstants.supabaseUrl,
-    anonKey: AppConstants.supabaseAnonKey,
-    authOptions: const FlutterAuthClientOptions(
-      authFlowType: AuthFlowType.pkce,
-    ),
-  );
-
-  // Initialize Hive
-  await Hive.initFlutter();
-  await Future.wait([
-    Hive.openBox('settings'),
-    Hive.openBox('groups_cache'),
-    Hive.openBox('expenses_cache'),
-    Hive.openBox('group_members_cache'),
-    Hive.openBox('pending_expenses'),
-  ]);
-
-  // Check real connectivity before runApp so isOnline is accurate from start.
-  await ConnectivityService.instance.init();
-
-  // Initialize HomeWidget App Group
-  await HomeWidgetService.instance.init();
-
+void main() {
   runZonedGuarded(
-    () => runApp(const ProviderScope(child: OkaeriSplitApp())),
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      // Initialize Supabase
+      await Supabase.initialize(
+        url: AppConstants.supabaseUrl,
+        anonKey: AppConstants.supabaseAnonKey,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
+      );
+
+      // Initialize Hive
+      await Hive.initFlutter();
+      await Future.wait([
+        Hive.openBox('settings'),
+        Hive.openBox('groups_cache'),
+        Hive.openBox('expenses_cache'),
+        Hive.openBox('group_members_cache'),
+        Hive.openBox('pending_expenses'),
+      ]);
+
+      // Check real connectivity before runApp so isOnline is accurate from start.
+      await ConnectivityService.instance.init();
+
+      // Initialize HomeWidget App Group
+      await HomeWidgetService.instance.init();
+
+      runApp(const ProviderScope(child: OkaeriSplitApp()));
+    },
     (error, stack) {
       // supabase_flutter 2.x re-processes the recovery deep link via
       // uriLinkStream after already consuming it via getInitialAppLink,

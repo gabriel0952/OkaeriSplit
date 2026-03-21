@@ -54,6 +54,14 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     // ── 群組名稱 Section ────────────────────────────────
+                    Text(
+                      '群組名稱',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.group_outlined),
@@ -330,48 +338,12 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   }
 
   Future<void> _showEditNameDialog(BuildContext context, String currentName) async {
-    final controller = TextEditingController(text: currentName);
-    String? error;
-
-    final confirmed = await showDialog<bool>(
+    final newName = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('編輯群組名稱'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: '群組名稱',
-              errorText: error,
-            ),
-            onChanged: (_) {
-              if (error != null) setDialogState(() => error = null);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (controller.text.trim().isEmpty) {
-                  setDialogState(() => error = '請輸入群組名稱');
-                  return;
-                }
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('確認'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _EditNameDialog(initialName: currentName),
     );
 
-    final newName = controller.text.trim();
-    controller.dispose();
-    if (confirmed != true || !context.mounted) return;
+    if (newName == null || !context.mounted) return;
     if (newName == currentName) return;
 
     final updateGroupName = ref.read(updateGroupNameUseCaseProvider);
@@ -983,6 +955,69 @@ class _ExchangeRateFormSheetState
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── 編輯群組名稱 Dialog ────────────────────────────────────────────────────────
+class _EditNameDialog extends StatefulWidget {
+  const _EditNameDialog({required this.initialName});
+  final String initialName;
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_controller.text.trim().isEmpty) {
+      setState(() => _error = '請輸入群組名稱');
+      return;
+    }
+    Navigator.of(context).pop(_controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('編輯群組名稱'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: '群組名稱',
+          errorText: _error,
+        ),
+        onChanged: (_) {
+          if (_error != null) setState(() => _error = null);
+        },
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: _submit,
+          child: const Text('確認'),
+        ),
+      ],
     );
   }
 }
