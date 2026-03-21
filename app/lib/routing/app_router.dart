@@ -12,8 +12,9 @@ import 'package:app/features/expenses/presentation/screens/expense_detail_screen
 import 'package:app/features/expenses/presentation/screens/expense_list_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_stats_screen.dart';
 import 'package:app/features/groups/presentation/screens/create_group_screen.dart';
-import 'package:app/features/groups/presentation/screens/group_detail_screen.dart';
+import 'package:app/features/groups/presentation/screens/group_home_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_list_screen.dart';
+import 'package:app/features/groups/presentation/screens/group_settings_screen.dart';
 import 'package:app/features/profile/presentation/screens/profile_screen.dart';
 import 'package:app/features/settlements/presentation/screens/balance_screen.dart';
 import 'package:app/features/settlements/presentation/screens/settlement_history_screen.dart';
@@ -168,11 +169,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: ':groupId',
                     pageBuilder: (_, state) => _slidePage(
                       state,
-                      GroupDetailScreen(
+                      GroupHomeScreen(
                         groupId: state.pathParameters['groupId']!,
                       ),
                     ),
                     routes: [
+                      GoRoute(
+                        path: 'settings',
+                        pageBuilder: (_, state) => _slidePage(
+                          state,
+                          GroupSettingsScreen(
+                            groupId: state.pathParameters['groupId']!,
+                          ),
+                        ),
+                      ),
                       GoRoute(
                         path: 'expenses',
                         pageBuilder: (_, state) => _slidePage(
