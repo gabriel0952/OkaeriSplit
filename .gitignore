@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Node
+node_modules/
+package-lock.json
+
+# Apple keys — do not commit
+AuthKey_*.p8
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
