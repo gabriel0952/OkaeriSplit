@@ -83,7 +83,9 @@ class ExpenseListSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,11 +121,12 @@ class ExpenseListSkeleton extends StatelessWidget {
               color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
             ),
             child: Column(
-              children: List.generate(5, (i) => _SkeletonExpenseRow(isLast: i == 4)),
+              children: List.generate(3, (i) => _SkeletonExpenseRow(isLast: i == 2)),
             ),
           ),
         ],
       ),
+    ),
     );
   }
 }

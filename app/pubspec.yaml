@@ -1,7 +1,7 @@
 name: app
 description: "OkaeriSplit - 群組分帳 App"
 publish_to: 'none'
-version: 1.6.0+12
+version: 1.7.0+13
 
 environment:
   sdk: ^3.11.0

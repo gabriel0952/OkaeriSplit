@@ -50,9 +50,9 @@ class MainShell extends ConsumerWidget {
           // Task 2.1: rounded icon variants
           destinations: const [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: '總覽',
+              icon: Icon(Icons.assignment_outlined),
+              selectedIcon: Icon(Icons.assignment),
+              label: '待辦',
             ),
             NavigationDestination(
               icon: Icon(Icons.group_outlined),

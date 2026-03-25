@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:app/core/widgets/glass_sheet_wrapper.dart';
+
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/widgets/offline_banner.dart';
@@ -442,20 +444,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     if (availableCurrencies.length <= 1) return;
     showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: availableCurrencies.map((c) => ListTile(
-            title: Text(c),
-            trailing: _selectedCurrency == c
-                ? Icon(Icons.check_rounded,
-                    color: Theme.of(context).colorScheme.primary)
-                : null,
-            onTap: () {
-              setState(() => _selectedCurrency = c);
-              Navigator.pop(context);
-            },
-          )).toList(),
+      backgroundColor: Colors.transparent,
+      builder: (context) => GlassSheetWrapper(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: availableCurrencies.map((c) => ListTile(
+              title: Text(c),
+              trailing: _selectedCurrency == c
+                  ? Icon(Icons.check_rounded,
+                      color: Theme.of(context).colorScheme.primary)
+                  : null,
+              onTap: () {
+                setState(() => _selectedCurrency = c);
+                Navigator.pop(context);
+              },
+            )).toList(),
+          ),
         ),
       ),
     );
@@ -1338,21 +1344,25 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   Future<void> _pickAttachment() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('拍照'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('從相簿選取'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
+      backgroundColor: Colors.transparent,
+      builder: (context) => GlassSheetWrapper(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('拍照'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('從相簿選取'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1581,7 +1591,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           ref.invalidate(expensesProvider(widget.groupId));
           ref.invalidate(expenseDetailProvider(widget.expenseId!));
           ref.invalidate(balancesProvider(widget.groupId));
-          if (mounted) context.pop();
+          if (mounted) context.go('/groups/${widget.groupId}');
         },
       );
     } else {

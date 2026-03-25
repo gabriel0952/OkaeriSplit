@@ -1,91 +1,165 @@
 import 'package:app/core/widgets/app_error_widget.dart';
-import 'package:app/core/widgets/skeleton_box.dart';
 import 'package:app/core/widgets/offline_banner.dart';
+import 'package:app/core/widgets/skeleton_box.dart';
+import 'package:app/core/widgets/user_avatar.dart';
 import 'package:app/features/dashboard/presentation/providers/dashboard_provider.dart';
-import 'package:app/features/dashboard/presentation/widgets/balance_summary_card.dart';
-import 'package:app/features/dashboard/presentation/widgets/group_balance_row.dart';
-import 'package:app/features/dashboard/presentation/widgets/recent_expense_list.dart';
-import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
+import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-void _showBalanceInfo(BuildContext context) {
-  showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('帳務總覽說明'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
+class DashboardScreen extends ConsumerWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final debtsAsync = ref.watch(crossGroupDebtsProvider);
+    final groupsAsync = ref.watch(groupsProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('待辦'),
+      ),
+      body: Column(
         children: [
-          _InfoRow(
-            label: '應收',
-            description: '各群組中別人欠你的金額之和',
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          _InfoRow(
-            label: '應付',
-            description: '各群組中你欠別人的金額之和',
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(height: 12),
-          _InfoRow(
-            label: '淨額',
-            description: '應收減去應付，正值代表整體為收款方',
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          const OfflineBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(crossGroupDebtsProvider);
+              },
+              child: debtsAsync.when(
+                loading: () => const _PendingTodoSkeleton(),
+                error: (error, _) => ListView(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: AppErrorWidget(
+                        message: error.toString(),
+                        onRetry: () =>
+                            ref.invalidate(crossGroupDebtsProvider),
+                      ),
+                    ),
+                  ],
+                ),
+                data: (debts) {
+                  final groups = groupsAsync.valueOrNull ?? [];
+                  final hasActiveGroups =
+                      groups.any((g) => g.status == 'active');
+
+                  if (!hasActiveGroups) {
+                    return const _NoGroupsEmptyState();
+                  }
+
+                  final iOweItems =
+                      debts.where((d) => d.iOwe).toList();
+                  final owedItems =
+                      debts.where((d) => !d.iOwe).toList();
+
+                  if (iOweItems.isEmpty && owedItems.isEmpty) {
+                    return const _AllClearEmptyState();
+                  }
+
+                  return ListView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    children: [
+                      if (iOweItems.isNotEmpty)
+                        _DebtSection(
+                          title: '你需要付款',
+                          items: iOweItems,
+                          accentColor:
+                              Theme.of(context).colorScheme.error,
+                        ),
+                      if (owedItems.isNotEmpty)
+                        _DebtSection(
+                          title: '別人欠你',
+                          items: owedItems,
+                          accentColor:
+                              Theme.of(context).colorScheme.primary,
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('知道了'),
-        ),
-      ],
-    ),
-  );
+    );
+  }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.description,
-    required this.color,
+// ─────────────────────────────────────────────
+// Section
+// ─────────────────────────────────────────────
+
+class _DebtSection extends StatelessWidget {
+  const _DebtSection({
+    required this.title,
+    required this.items,
+    required this.accentColor,
   });
 
-  final String label;
-  final String description;
-  final Color color;
+  final String title;
+  final List<CrossGroupDebtItem> items;
+  final Color accentColor;
+
+  String _subtotal() {
+    final currencies = items.map((i) => i.currency).toSet();
+    if (currencies.length == 1) {
+      final total = items.fold(0.0, (sum, i) => sum + i.amount);
+      return '共 ${currencies.first} ${total.toStringAsFixed(0)}';
+    }
+    return '共 ${items.length} 筆';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final theme = Theme.of(context);
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 36,
-          height: 22,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+          child: Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentColor,
                 ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _subtotal(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            description,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Card(
+            child: Column(
+              children: items.asMap().entries.map((e) {
+                return _PendingDebtItem(
+                  item: e.value,
+                  isLast: e.key == items.length - 1,
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],
@@ -93,117 +167,295 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({super.key});
+// ─────────────────────────────────────────────
+// Debt item
+// ─────────────────────────────────────────────
+
+class _PendingDebtItem extends ConsumerWidget {
+  const _PendingDebtItem({
+    required this.item,
+    this.isLast = false,
+  });
+
+  final CrossGroupDebtItem item;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final overallAsync = ref.watch(overallBalancesProvider);
-    final recentAsync = ref.watch(recentExpensesProvider);
+    final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('總覽')),
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          Expanded(
-            child: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(overallBalancesProvider);
-          ref.invalidate(recentExpensesProvider);
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Balance summary
-            overallAsync.when(
-              loading: () => const BalanceSkeleton(),
-              error: (error, _) => AppErrorWidget(
-                message: error.toString(),
-                onRetry: () => ref.invalidate(overallBalancesProvider),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: UserAvatar(
+            name: item.counterpartDisplayName,
+            avatarUrl: item.counterpartAvatarUrl,
+            radius: 18,
+          ),
+          title: Text(
+            item.counterpartDisplayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            item.groupName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${item.currency} ${item.amount.toStringAsFixed(0)}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              data: (balances) {
-                if (balances.isEmpty) {
-                  return const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(child: Text('加入群組後即可查看帳務')),
-                    ),
-                  );
-                }
+              const SizedBox(width: 2),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+          onTap: () async {
+            await context.push('/groups/${item.groupId}');
+            if (context.mounted) {
+              ref.invalidate(crossGroupDebtsProvider);
+            }
+          },
+        ),
+        if (!isLast)
+          Divider(
+            height: 1,
+            indent: 72,
+            color: theme.colorScheme.outlineVariant
+                .withValues(alpha: 0.5),
+          ),
+      ],
+    );
+  }
+}
 
+// ─────────────────────────────────────────────
+// Empty states
+// ─────────────────────────────────────────────
+
+class _NoGroupsEmptyState extends StatelessWidget {
+  const _NoGroupsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.group_add_outlined,
+                size: 56,
+                color: theme.colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '還沒有群組',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '加入或建立一個群組，開始記帳吧',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.tonal(
+                onPressed: () => context.go('/groups'),
+                child: const Text('前往群組'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AllClearEmptyState extends StatelessWidget {
+  const _AllClearEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.check_circle_outline_rounded,
+                size: 56,
+                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '帳款都清楚了',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '目前所有群組的帳款都已結清',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Loading skeleton
+// ─────────────────────────────────────────────
+
+class _PendingTodoSkeleton extends StatelessWidget {
+  const _PendingTodoSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header skeleton
+          Row(
+            children: [
+              SkeletonBox(width: 7, height: 7, borderRadius: 4),
+              const SizedBox(width: 8),
+              SkeletonBox(width: 80, height: 13, borderRadius: 4),
+              const Spacer(),
+              SkeletonBox(width: 60, height: 11, borderRadius: 4),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Item card skeleton
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.4),
+            ),
+            child: Column(
+              children: List.generate(2, (i) {
+                final isLast = i == 1;
                 return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          '個人帳務總覽',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.info_outline, size: 18),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          tooltip: '計算說明',
-                          onPressed: () => _showBalanceInfo(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    BalanceSummaryCard(balances: balances),
-                    const SizedBox(height: 24),
-                    Text(
-                      '各群組帳務',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      child: Column(
-                        children: balances
-                            .map((balance) => GroupBalanceRow(
-                                  balance: balance,
-                                  onTap: () => context.push(
-                                    '/groups/${balance.groupId}/balances',
-                                  ),
-                                ))
-                            .toList(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          SkeletonBox(width: 36, height: 36, borderRadius: 18),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SkeletonBox(
+                                    width: 100, height: 13, borderRadius: 4),
+                                const SizedBox(height: 5),
+                                SkeletonBox(
+                                    width: 70, height: 10, borderRadius: 4),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SkeletonBox(width: 64, height: 14, borderRadius: 4),
+                        ],
                       ),
                     ),
+                    if (!isLast)
+                      Divider(
+                        height: 1,
+                        indent: 72,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outlineVariant
+                            .withValues(alpha: 0.4),
+                      ),
                   ],
                 );
-              },
+              }),
             ),
-            const SizedBox(height: 24),
-
-            // Recent expenses
-            Text(
-              '最近消費',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 24),
+          // Second section header skeleton
+          Row(
+            children: [
+              SkeletonBox(width: 7, height: 7, borderRadius: 4),
+              const SizedBox(width: 8),
+              SkeletonBox(width: 60, height: 13, borderRadius: 4),
+              const Spacer(),
+              SkeletonBox(width: 50, height: 11, borderRadius: 4),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.4),
             ),
-            const SizedBox(height: 8),
-            recentAsync.when(
-              loading: () => const ExpenseListSkeleton(),
-              error: (error, _) => AppErrorWidget(
-                message: error.toString(),
-                onRetry: () => ref.invalidate(recentExpensesProvider),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  SkeletonBox(width: 36, height: 36, borderRadius: 18),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBox(width: 90, height: 13, borderRadius: 4),
+                        const SizedBox(height: 5),
+                        SkeletonBox(width: 60, height: 10, borderRadius: 4),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SkeletonBox(width: 56, height: 14, borderRadius: 4),
+                ],
               ),
-              data: (expenses) => RecentExpenseList(expenses: expenses),
-            ),
-          ],
-        ),
             ),
           ),
         ],
