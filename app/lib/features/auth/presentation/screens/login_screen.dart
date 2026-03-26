@@ -146,54 +146,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ],
                   const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: _isLoading ? null : _handleSignIn,
-                      style: FilledButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('登入'),
-                    ),
+                  FilledButton(
+                    onPressed: _isLoading ? null : _handleSignIn,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('登入'),
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.go('/register'),
-                      icon: const Icon(Icons.person_add_outlined, size: 20),
-                      label: const Text('還沒有帳號？註冊'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/register'),
+                    icon: const Icon(Icons.person_add_outlined, size: 20),
+                    label: const Text('還沒有帳號？註冊'),
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.push('/guest-login'),
-                      icon: const Icon(Icons.person_outline, size: 20),
-                      label: const Text('以訪客身份進入'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/guest-login'),
+                    icon: const Icon(Icons.person_outline, size: 20),
+                    label: const Text('以訪客身份進入'),
                   ),
                   const SizedBox(height: 24),
                   const Row(

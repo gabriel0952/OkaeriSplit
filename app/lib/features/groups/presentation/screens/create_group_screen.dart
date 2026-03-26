@@ -105,64 +105,32 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // 群組名稱
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        child: TextFormField(
-                          controller: _nameController,
-                          decoration: const InputDecoration(
-                            hintText: '群組名稱',
-                            prefixIcon: Icon(Icons.group_outlined),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            filled: false,
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '請輸入群組名稱';
-                            }
-                            return null;
-                          },
-                        ),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: '群組名稱',
+                        prefixIcon: Icon(Icons.group_outlined),
                       ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '請輸入群組名稱';
+                        }
+                        return null;
+                      },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
                     // 幣別
-                    Text(
-                      '幣別',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 6),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.attach_money),
-                        title: const Text('幣別'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _selectedCurrency,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.chevron_right),
-                          ],
+                    InkWell(
+                      onTap: _showCurrencyPicker,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '幣別',
+                          prefixIcon: Icon(Icons.attach_money),
+                          suffixIcon: Icon(Icons.chevron_right),
                         ),
-                        onTap: _showCurrencyPicker,
+                        child: Text(_selectedCurrency),
                       ),
                     ),
                   ],
@@ -181,7 +149,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   Widget _buildSubmitBar() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

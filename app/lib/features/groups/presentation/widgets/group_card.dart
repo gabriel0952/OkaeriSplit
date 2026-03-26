@@ -61,7 +61,7 @@ class GroupCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${group.type.label} · ${group.currency}',
+                      '${group.createdAt.year}-${group.createdAt.month.toString().padLeft(2, '0')} · ${group.currency}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

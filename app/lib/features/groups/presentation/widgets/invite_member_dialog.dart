@@ -262,7 +262,7 @@ class _InviteMemberDialogState extends ConsumerState<InviteMemberDialog> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2),
                           )
-                        : FilledButton.tonal(
+                        : FilledButton(
                             onPressed: _invitingUserId != null
                                 ? null
                                 : () => _invite(user),

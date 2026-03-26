@@ -71,20 +71,28 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Icon(
+            Icons.lock_reset_outlined,
+            size: 64,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
           Text(
             '重設密碼',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            '輸入您的 Email，我們將發送重設密碼的連結。',
+            '輸入您的 Email，我們將發送重設密碼的連結',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 40),
           TextFormField(
             controller: _emailController,
             decoration: const InputDecoration(
@@ -108,23 +116,15 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _isLoading ? null : _handleSubmit,
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('發送重設連結'),
-            ),
+          FilledButton(
+            onPressed: _isLoading ? null : _handleSubmit,
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('發送重設連結'),
           ),
         ],
       ),
@@ -158,17 +158,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        SizedBox(
-          height: 48,
-          child: OutlinedButton(
-            onPressed: () => context.go('/login'),
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('回到登入'),
-          ),
+        OutlinedButton(
+          onPressed: () => context.go('/login'),
+          child: const Text('回到登入'),
         ),
       ],
     );

@@ -1382,9 +1382,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   // ─── Category Dialogs ────────────────────────────────────────────────────
 
   Future<void> _showAddCategoryDialog(BuildContext context) async {
-    final result = await showDialog<Map<String, String>>(
+    final result = await showModalBottomSheet<Map<String, String>>(
       context: context,
-      builder: (_) => const _AddCategoryDialog(),
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _AddCategorySheet(),
     );
 
     if (result != null && mounted) {
@@ -1754,9 +1756,9 @@ class _MemberChip extends StatelessWidget {
               ? (isSingle ? colorScheme.surface : colorScheme.primary)
               : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(20),
-          border: isSelected && isSingle
-              ? Border.all(color: colorScheme.primary, width: 2)
-              : Border.all(color: Colors.transparent, width: 2),
+          border: isSelected
+              ? (isSingle ? Border.all(color: colorScheme.primary, width: 2) : null)
+              : Border.all(color: colorScheme.outlineVariant, width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1873,37 +1875,31 @@ class _AttachmentThumbnail extends StatelessWidget {
 }
 
 // ── 新增自訂分類 Dialog ───────────────────────────────────────────────────────
-class _AddCategoryDialog extends StatefulWidget {
-  const _AddCategoryDialog();
+class _AddCategorySheet extends StatefulWidget {
+  const _AddCategorySheet();
 
   @override
-  State<_AddCategoryDialog> createState() => _AddCategoryDialogState();
+  State<_AddCategorySheet> createState() => _AddCategorySheetState();
 }
 
-class _AddCategoryDialogState extends State<_AddCategoryDialog> {
-  late final TextEditingController _nameController;
+class _AddCategorySheetState extends State<_AddCategorySheet> {
+  final _nameController = TextEditingController();
+  final _nameFocusNode = FocusNode();
   String? _selectedIcon;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _nameFocusNode.requestFocus();
+    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickIcon() async {
-    final icon = await showDialog<String>(
-      context: context,
-      builder: (_) => const IconPickerDialog(),
-    );
-    if (icon != null && mounted) {
-      setState(() => _selectedIcon = icon);
-    }
   }
 
   void _submit() {
@@ -1915,42 +1911,146 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('新增自訂分類'),
-      content: Column(
+    final colorScheme = Theme.of(context).colorScheme;
+    final canSubmit =
+        _nameController.text.trim().isNotEmpty && _selectedIcon != null;
+    final entries = categoryIconMap.entries.toList();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: '分類名稱'),
-            onSubmitted: (_) => _submit(),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Text('圖示：'),
-              const SizedBox(width: 8),
-              if (_selectedIcon != null)
-                Icon(resolveIcon(_selectedIcon!), size: 24),
-              const Spacer(),
-              TextButton(
-                onPressed: _pickIcon,
-                child: Text(_selectedIcon == null ? '選擇圖示' : '更換'),
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
-            ],
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+            child: Row(
+              children: [
+                Text(
+                  '新增自訂分類',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Content
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextFormField(
+                    controller: _nameController,
+                    focusNode: _nameFocusNode,
+                    decoration: const InputDecoration(
+                      labelText: '分類名稱',
+                      prefixIcon: Icon(Icons.label_outline),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '選擇圖示',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 5,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                    ),
+                    itemCount: entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final isSelected = _selectedIcon == entry.key;
+                      return GestureDetector(
+                        onTap: () =>
+                            setState(() => _selectedIcon = entry.key),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? colorScheme.primary
+                                : colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? null
+                                : Border.all(
+                                    color: colorScheme.outlineVariant),
+                          ),
+                          child: Icon(
+                            entry.value,
+                            size: 24,
+                            color: isSelected
+                                ? Colors.white
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          // Buttons
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: canSubmit ? _submit : null,
+                    child: const Text('新增分類'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: _submit,
-          child: const Text('新增'),
-        ),
-      ],
     );
   }
 }

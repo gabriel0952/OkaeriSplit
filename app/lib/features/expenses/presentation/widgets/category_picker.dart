@@ -116,6 +116,9 @@ class _CategoryTile extends StatelessWidget {
               ? colorScheme.primary
               : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(14),
+          border: isSelected
+              ? null
+              : Border.all(color: colorScheme.outlineVariant),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

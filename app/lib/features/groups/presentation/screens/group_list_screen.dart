@@ -5,6 +5,7 @@ import 'package:app/core/widgets/skeleton_box.dart';
 import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
 import 'package:app/features/groups/presentation/widgets/group_card.dart';
+import 'package:app/features/groups/presentation/widgets/create_group_sheet.dart';
 import 'package:app/features/groups/presentation/widgets/join_group_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,7 +47,12 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
                     title: '還沒有群組',
                     subtitle: '建立或加入一個群組開始分帳吧',
                     action: FilledButton.tonal(
-                      onPressed: () => context.push('/groups/create'),
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
+                        builder: (_) => const CreateGroupSheet(),
+                      ),
                       child: const Text('建立群組'),
                     ),
                   );
@@ -147,7 +153,12 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
           ExpandableFabChild(
             icon: Icons.add,
             label: '建立群組',
-            onPressed: () => context.push('/groups/create'),
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (_) => const CreateGroupSheet(),
+            ),
           ),
         ],
       ),

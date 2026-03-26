@@ -11,7 +11,6 @@ import 'package:app/features/expenses/presentation/screens/add_expense_screen.da
 import 'package:app/features/expenses/presentation/screens/expense_detail_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_list_screen.dart';
 import 'package:app/features/expenses/presentation/screens/expense_stats_screen.dart';
-import 'package:app/features/groups/presentation/screens/create_group_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_home_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_list_screen.dart';
 import 'package:app/features/groups/presentation/screens/group_settings_screen.dart';
@@ -127,8 +126,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
-      GoRoute(path: '/guest-login', builder: (_, _) => const GuestLoginScreen()),
+      GoRoute(
+        path: '/register',
+        pageBuilder: (_, state) => _slidePage(state, const RegisterScreen()),
+      ),
+      GoRoute(
+        path: '/guest-login',
+        pageBuilder: (_, state) =>
+            _slidePage(state, const GuestLoginScreen()),
+      ),
       GoRoute(
         path: '/forgot-password',
         pageBuilder: (_, state) =>
@@ -160,11 +166,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/groups',
                 builder: (_, _) => const GroupListScreen(),
                 routes: [
-                  GoRoute(
-                    path: 'create',
-                    pageBuilder: (_, state) =>
-                        _slidePage(state, const CreateGroupScreen()),
-                  ),
                   GoRoute(
                     path: ':groupId',
                     pageBuilder: (_, state) => _slidePage(

@@ -865,7 +865,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
 
             return [
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + scrollCompensation),
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + scrollCompensation),
                 sliver: SliverList.builder(
                   itemCount: groups.length,
                   itemBuilder: (context, index) {
@@ -961,7 +961,7 @@ class _GroupHomeScreenState extends ConsumerState<GroupHomeScreen> {
           ),
           const SizedBox(height: 2),
           Text(
-            group.currency,
+            '${group.createdAt.year}-${group.createdAt.month.toString().padLeft(2, '0')} · ${group.currency}',
             style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),

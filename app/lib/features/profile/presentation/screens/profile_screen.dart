@@ -115,7 +115,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              OutlinedButton.icon(
+              FilledButton.icon(
                 onPressed: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,
@@ -144,20 +144,15 @@ class ProfileScreen extends ConsumerWidget {
                 },
                 icon: const Icon(Icons.logout),
                 label: const Text('登出'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
-                ),
               ),
               const SizedBox(height: 12),
-              OutlinedButton.icon(
+              FilledButton.icon(
                 onPressed: () => _deleteAccount(context, ref),
                 icon: const Icon(Icons.delete_forever),
                 label: const Text('刪除帳號'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
-                  side: BorderSide(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
               ),
             ],

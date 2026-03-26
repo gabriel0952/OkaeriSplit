@@ -161,7 +161,7 @@ class _GuestLoginScreenState extends ConsumerState<GuestLoginScreen> {
                 ),
               ],
               const SizedBox(height: 24),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _isLoading ? null : _handleClaim,
                 child: _isLoading
                     ? const SizedBox(

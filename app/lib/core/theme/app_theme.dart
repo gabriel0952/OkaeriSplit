@@ -95,12 +95,33 @@ abstract final class AppTheme {
         ),
       ),
 
-      // Task 1.5: Chip theme — no border, radius 20
+      // OutlinedButton — aligned with FilledButton spec, border matches text color
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: WidgetStateProperty.all(const Size.fromHeight(52)),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return BorderSide(color: _primaryColor.withValues(alpha: 0.38));
+            }
+            return const BorderSide(color: _primaryColor);
+          }),
+        ),
+      ),
+
+      // Task 1.5: Chip theme — radius 20, border only on unselected
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        side: BorderSide.none,
+        side: WidgetStateBorderSide.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return BorderSide.none;
+          return BorderSide(
+            color: colorScheme.outlineVariant,
+          );
+        }),
       ),
 
       // Task 1.5: Divider — subtle
@@ -225,11 +246,25 @@ abstract final class AppTheme {
         ),
       ),
 
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        side: BorderSide.none,
+        side: WidgetStateBorderSide.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return BorderSide.none;
+          return BorderSide(
+            color: colorScheme.outlineVariant,
+          );
+        }),
       ),
 
       dividerTheme: DividerThemeData(

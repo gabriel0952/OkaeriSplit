@@ -163,7 +163,7 @@ class _AddGuestMemberDialogState extends ConsumerState<AddGuestMemberDialog> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  FilledButton(
                     onPressed: _isLoading ? null : _createGuest,
                     child: _isLoading
                         ? const SizedBox(
