@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:app/features/expenses/presentation/screens/receipt_scan_result_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -364,38 +365,77 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Currency chip — tappable to change currency
-            GestureDetector(
-              onTap: () => _showCurrencyPicker(context, availableCurrencies),
-              child: Container(
-                padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: colorScheme.outlineVariant,
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _selectedCurrency ?? currency,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurfaceVariant,
-                        letterSpacing: 0.5,
+            // Currency chip + Scan receipt button
+            Row(
+              children: [
+                // Currency chip — tappable to change currency
+                GestureDetector(
+                  onTap: () => _showCurrencyPicker(context, availableCurrencies),
+                  child: Container(
+                    padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: colorScheme.outlineVariant,
+                        width: 1,
                       ),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
-                      color: colorScheme.onSurfaceVariant,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _selectedCurrency ?? currency,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_drop_down,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                const Spacer(),
+                // Scan receipt button
+                GestureDetector(
+                  onTap: _startReceiptScan,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: colorScheme.primary.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.document_scanner_outlined,
+                          size: 15,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '掃描收據',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
 
@@ -1379,6 +1419,118 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
+  // ─── Receipt Scan ─────────────────────────────────────────────────────────
+
+  Future<void> _startReceiptScan() async {
+    // Step 1: Pick image source
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GlassSheetWrapper(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Text(
+                  '掃描收據',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('拍照'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('從相簿選取'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    // Step 2: Pick image
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    // Step 3: Navigate to scan result screen
+    final importData = await Navigator.of(context).push<ReceiptImportData>(
+      MaterialPageRoute(
+        builder: (_) => ReceiptScanResultScreen(
+          imageFile: File(picked.path),
+        ),
+      ),
+    );
+    if (importData == null || !mounted) return;
+
+    // Step 4: Apply import data to form
+    _applyReceiptImport(importData);
+  }
+
+  void _applyReceiptImport(ReceiptImportData data) {
+    setState(() {
+      // Set amount
+      _amountController.text = data.total.toStringAsFixed(
+        data.total == data.total.roundToDouble() ? 0 : 2,
+      );
+
+      // Set description
+      if (_descriptionController.text.trim().isEmpty) {
+        _descriptionController.text = '收據掃描';
+      }
+
+      // Switch to itemized split and populate items
+      if (data.items.isNotEmpty) {
+        _splitType = SplitType.itemized;
+        _splitTypeExpanded = true;
+
+        // Clear existing items
+        for (final item in _itemEntries) {
+          item.nameController.dispose();
+          item.amountController.dispose();
+        }
+        _itemEntries.clear();
+
+        // Populate from scan result
+        // Get current group members for sharedByUserIds
+        final membersAsync = ref.read(groupMembersProvider(widget.groupId));
+        final members = membersAsync.valueOrNull ?? [];
+        final allMemberIds = members.map((m) => m.userId).toSet();
+
+        for (final item in data.items) {
+          _itemEntries.add(_ItemEntry(
+            nameController: TextEditingController(text: item.name),
+            amountController: TextEditingController(
+              text: item.amount > 0
+                  ? item.amount.toStringAsFixed(
+                      item.amount == item.amount.roundToDouble() ? 0 : 2,
+                    )
+                  : '',
+            ),
+            sharedByUserIds: Set.of(allMemberIds),
+          ));
+        }
+      }
+
+      // Add receipt image as attachment
+      _newAttachments.add(data.imageFile);
+    });
+  }
+
   // ─── Category Dialogs ────────────────────────────────────────────────────
 
   Future<void> _showAddCategoryDialog(BuildContext context) async {
@@ -2054,3 +2206,4 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
     );
   }
 }
+

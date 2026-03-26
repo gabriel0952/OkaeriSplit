@@ -1075,9 +1075,10 @@ class _DebtSummary extends ConsumerWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         // 標題列（點擊折疊/展開）
         GestureDetector(
           onTap: onToggle,
@@ -1142,6 +1143,7 @@ class _DebtSummary extends ConsumerWidget {
           }),
         ],
       ],
+      ),
     );
   }
 }
