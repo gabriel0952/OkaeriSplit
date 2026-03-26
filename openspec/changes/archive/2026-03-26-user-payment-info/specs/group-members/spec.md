@@ -1,3 +1,5 @@
+## MODIFIED Requirements
+
 ### Requirement: 群組設定成員列表支援點擊查看詳情
 群組設定頁的成員列表 SHALL 支援點擊互動，點擊任意成員開啟 MemberDetailSheet，顯示該成員的信箱、匯款資訊（若有）及可用操作。現有的 Dismissible swipe-to-dismiss 刪除功能 SHALL 移除，刪除操作整合至 MemberDetailSheet 內。
 
@@ -32,24 +34,3 @@
 #### Scenario: 非群主或自己不顯示移除按鈕
 - **WHEN** 目前使用者非群主，或所選成員為自己或群主
 - **THEN** MemberDetailSheet 不顯示「移除成員」按鈕
-
-### Requirement: 封存群組中禁止新增成員
-GroupDetailScreen 的邀請成員與新增訪客入口 SHALL 在群組已封存時隱藏。
-
-#### Scenario: 封存群組中邀請按鈕隱藏
-- **WHEN** 使用者進入已封存群組的 GroupDetailScreen
-- **THEN** 「邀請」與「訪客」按鈕不顯示
-
-### Requirement: 封存後訪客認領代碼失效
-群組封存後，現有訪客 claim_code SHALL 因訪客帳號已被刪除而自動失效，`claim_guest_member` Edge Function 回傳「無效的訪客代碼」錯誤。
-
-#### Scenario: 使用已封存群組的訪客代碼
-- **WHEN** 使用者輸入已封存群組所屬的訪客代碼
-- **THEN** `claim_guest_member` 找不到對應 profile，回傳 404「無效的訪客代碼」
-
-### Requirement: 封存時排除已升級帳號
-`archive_group` Edge Function SHALL 僅刪除 `profiles.is_guest = true` 的成員帳號，已升級為正式帳號（`is_guest = false`）的前訪客 SHALL NOT 被刪除。
-
-#### Scenario: 群組含有已升級前訪客時封存
-- **WHEN** 群組擁有者封存群組，群組內有一位原訪客已升級為正式帳號
-- **THEN** 封存成功，已升級帳號的 auth user 與 profile 不受影響，仍可正常使用 app

@@ -4,7 +4,9 @@ import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/data/datasources/supabase_profile_datasource.dart';
 import 'package:app/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:app/features/profile/domain/repositories/profile_repository.dart';
+import 'package:app/features/profile/domain/usecases/get_payment_info.dart';
 import 'package:app/features/profile/domain/usecases/get_profile.dart';
+import 'package:app/features/profile/domain/usecases/update_payment_info.dart';
 import 'package:app/features/profile/domain/usecases/update_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,6 +27,14 @@ final getProfileUseCaseProvider = Provider<GetProfile>((ref) {
 
 final updateProfileUseCaseProvider = Provider<UpdateProfile>((ref) {
   return UpdateProfile(ref.watch(profileRepositoryProvider));
+});
+
+final getPaymentInfoUseCaseProvider = Provider<GetPaymentInfo>((ref) {
+  return GetPaymentInfo(ref.watch(profileRepositoryProvider));
+});
+
+final updatePaymentInfoUseCaseProvider = Provider<UpdatePaymentInfo>((ref) {
+  return UpdatePaymentInfo(ref.watch(profileRepositoryProvider));
 });
 
 // Presentation

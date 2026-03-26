@@ -4,12 +4,13 @@ import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/groups/domain/entities/group_exchange_rate_entity.dart';
 import 'package:app/features/groups/presentation/providers/group_provider.dart';
+import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:app/features/groups/presentation/widgets/add_guest_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/invite_member_dialog.dart';
 import 'package:app/features/groups/presentation/widgets/member_avatar.dart';
+import 'package:app/features/groups/presentation/widgets/member_detail_sheet.dart';
 import 'package:app/features/settlements/presentation/providers/settlement_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:go_router/go_router.dart';
@@ -144,40 +145,17 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                                 member.userId != currentUser?.id &&
                                 member.role != 'owner';
 
-                            final tile = MemberAvatar(
-                              member: member,
-                              resolvedName: resolvedName,
-                            );
-
-                            if (!canRemove) return tile;
-
-                            return Dismissible(
-                              key: Key(member.userId),
-                              direction: DismissDirection.endToStart,
-                              background: ColoredBox(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .errorContainer,
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Padding(
-                                    padding:
-                                        const EdgeInsets.only(right: 20),
-                                    child: Icon(
-                                      Icons.person_remove_outlined,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onErrorContainer,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              confirmDismiss: (_) => _tryRemoveMember(
+                            return InkWell(
+                              onTap: () => _showMemberDetail(
                                 context,
-                                member.userId,
-                                resolvedName,
+                                member: member,
+                                resolvedName: resolvedName,
+                                canRemove: canRemove,
                               ),
-                              child: tile,
+                              child: MemberAvatar(
+                                member: member,
+                                resolvedName: resolvedName,
+                              ),
                             );
                           }).toList(),
                         ),
@@ -529,41 +507,36 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     }
   }
 
-  Future<bool> _tryRemoveMember(
+  Future<void> _showMemberDetail(
+    BuildContext context, {
+    required GroupMemberEntity member,
+    required String resolvedName,
+    required bool canRemove,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => MemberDetailSheet(
+        member: member,
+        resolvedName: resolvedName,
+        canRemove: canRemove,
+        onRemove: () => _doRemoveMember(context, member.userId, resolvedName),
+      ),
+    );
+  }
+
+  Future<void> _doRemoveMember(
     BuildContext context,
     String userId,
     String displayName,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移除成員'),
-        content: Text('確定要將「$displayName」從群組中移除嗎？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('移除'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return false;
-
     final removeMember = ref.read(removeMemberUseCaseProvider);
-    final result =
-        await removeMember(groupId: groupId, userId: userId);
+    final result = await removeMember(groupId: groupId, userId: userId);
 
-    if (!context.mounted) return false;
+    if (!context.mounted) return;
 
-    return result.fold(
+    result.fold(
       (failure) {
         showDialog<void>(
           context: context,
@@ -583,12 +556,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
             ],
           ),
         );
-        return false;
       },
-      (_) {
-        ref.invalidate(groupMembersProvider(groupId));
-        return true;
-      },
+      (_) => ref.invalidate(groupMembersProvider(groupId)),
     );
   }
 

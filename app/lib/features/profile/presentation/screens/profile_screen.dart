@@ -1,8 +1,10 @@
 import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/core/widgets/offline_banner.dart';
+import 'package:app/features/auth/domain/entities/user_entity.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/presentation/providers/profile_provider.dart';
+import 'package:app/features/profile/presentation/widgets/edit_payment_info_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -65,6 +67,23 @@ class ProfileScreen extends ConsumerWidget {
                       title: const Text('電子郵件'),
                       subtitle: Text(profile.email),
                     ),
+                    if (!profile.isGuest) ...[
+                      const Divider(height: 1),
+                      ListTile(
+                        title: const Text('匯款資訊'),
+                        subtitle: profile.paymentInfo != null
+                            ? Text(
+                                '${profile.paymentInfo!.bankName} (${profile.paymentInfo!.bankCode})${profile.paymentInfo!.accountNumber}',
+                              )
+                            : const Text('尚未設定'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: isOnline
+                            ? () => _editPaymentInfo(context, ref, profile)
+                            : () => ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('離線時無法編輯個人資料')),
+                                ),
+                      ),
+                    ],
                     const Divider(height: 1),
                     ListTile(
                       title: const Text('預設幣別'),
@@ -243,6 +262,22 @@ class ProfileScreen extends ConsumerWidget {
         // Account deleted, auth state change will redirect to login
       },
     );
+  }
+
+  Future<void> _editPaymentInfo(
+    BuildContext context,
+    WidgetRef ref,
+    UserEntity profile,
+  ) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => EditPaymentInfoSheet(initial: profile.paymentInfo),
+    );
+    if (saved == true && context.mounted) {
+      ref.invalidate(profileProvider);
+    }
   }
 
   Future<void> _editCurrency(

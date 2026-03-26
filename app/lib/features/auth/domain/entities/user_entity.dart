@@ -1,3 +1,5 @@
+import 'package:app/features/profile/domain/entities/payment_info_entity.dart';
+
 class UserEntity {
   const UserEntity({
     required this.id,
@@ -6,6 +8,7 @@ class UserEntity {
     this.avatarUrl,
     this.defaultCurrency = 'TWD',
     this.isGuest = false,
+    this.paymentInfo,
   });
 
   final String id;
@@ -14,4 +17,5 @@ class UserEntity {
   final String? avatarUrl;
   final String defaultCurrency;
   final bool isGuest;
+  final PaymentInfoEntity? paymentInfo;
 }
