@@ -1,0 +1,144 @@
+{
+  "L0": "收據掃描 OCR + AI 解析：替換 llamafu → flutter_local_ai + Apple Vision，修正文字對應問題 — 已完成實作",
+  "compact_version": "2.0",
+  "timestamp": "2026-03-27T00:00:00+08:00",
+  "project": {
+    "name": "OkaeriSplit",
+    "path": "/Users/raychen/Documents/個人資料/OkaeriSplit",
+    "tech_stack": ["Dart", "Flutter", "Riverpod", "Supabase", "go_router"],
+    "description": "多人分帳 App，支援群組消費記錄、帳務結算、多幣別"
+  },
+  "session_goal": "將收據掃描功能從已壞掉的 llamafu 替換為 flutter_local_ai（Apple Foundation Models）+ Apple Vision OCR，並解決文字與金額對應錯誤問題",
+  "completed": [
+    {
+      "task": "pubspec.yaml 依賴替換",
+      "files": ["app/pubspec.yaml"],
+      "detail": "移除 llamafu、http；新增 flutter_local_ai: ^0.0.6、google_mlkit_text_recognition: ^0.15.1（從 ^0.13.0 升級以修正 CocoaPods 衝突）、image: ^4.2.0、path_provider: ^2.1.4"
+    },
+    {
+      "task": "iOS Podfile 設定還原",
+      "files": ["app/ios/Podfile"],
+      "detail": "移除 use_frameworks! :linkage => :static 與 EXCLUDED_ARCHS 設定；改為標準 use_frameworks!；platform 維持 ios 16.0"
+    },
+    {
+      "task": "Android 設定清理",
+      "files": ["app/android/app/proguard-rules.pro", "app/android/app/src/main/AndroidManifest.xml"],
+      "detail": "清除 proguard 中 MediaPipe/Protobuf 規則；AndroidManifest 新增 com.google.android.aicore uses-library"
+    },
+    {
+      "task": "dart_defines 移除 HF_TOKEN",
+      "files": ["app/dart_defines.example.json", "app/dart_defines.json"],
+      "detail": "移除不再需要的 HF_TOKEN 欄位"
+    },
+    {
+      "task": "GemmaModelManager 改寫",
+      "files": ["app/lib/core/services/gemma_model_manager.dart"],
+      "detail": "移除所有下載/llamafu 邏輯；封裝 FlutterLocalAi().isAvailable() 與 getReadyModel()；ModelDownloadState 移除 ModelDownloading，新增 ModelNotSupported"
+    },
+    {
+      "task": "gemma_model_provider 移除 modelDownloadStateProvider",
+      "files": ["app/lib/core/providers/gemma_model_provider.dart"],
+      "detail": "StreamProvider 不再需要，只保留 gemmaModelManagerProvider"
+    },
+    {
+      "task": "receipt_scan_datasource.dart 改寫為雙階段 pipeline",
+      "files": ["app/lib/features/expenses/data/datasources/receipt_scan_datasource.dart"],
+      "detail": "iOS 改用 Apple Vision（MethodChannel com.okaeri.native_ocr）；Android 維持 ML Kit 雙 script；LLM 改為數字專用 prompt（不含 CJK），先以 regex 萃取名稱再送數字給 LLM；LLM 回傳 line_index → 映射回原始 CJK 名稱；90 秒 timeout；finally 清除 temp 檔"
+    },
+    {
+      "task": "AppDelegate.swift 新增 Apple Vision OCR method channel",
+      "files": ["app/ios/Runner/AppDelegate.swift"],
+      "detail": "實作 FlutterImplicitEngineDelegate；內嵌 NativeOCR handler 於 AppDelegate（避免 Xcode target 問題）；VNRecognizeTextRequest 設定 recognitionLanguages: [ja, zh-Hant, zh-Hans, en-US]、accurate level、language correction"
+    },
+    {
+      "task": "ScanStatus 與 ReceiptScanState 更新",
+      "files": ["app/lib/features/expenses/presentation/providers/receipt_scan_provider.dart"],
+      "detail": "移除 modelNotDownloaded、downloading 狀態；新增 notSupported；移除 downloadProgress 欄位與 downloadModelAndScan() 方法"
+    },
+    {
+      "task": "receipt_scan_result_screen.dart UI 更新",
+      "files": ["app/lib/features/expenses/presentation/screens/receipt_scan_result_screen.dart"],
+      "detail": "移除下載說明卡與 LinearProgressIndicator；新增 notSupported 訊息卡「此裝置不支援 AI 辨識功能」"
+    },
+    {
+      "task": "add_expense_screen.dart 整合 AI 可用性檢查",
+      "files": ["app/lib/features/expenses/presentation/screens/add_expense_screen.dart"],
+      "detail": "新增 _isAiAvailable 狀態；initState 呼叫 FlutterLocalAi().isAvailable()；不支援時隱藏掃描收據按鈕"
+    }
+  ],
+  "in_progress": [
+    {
+      "task": "Tasks 10.2–10.10：實機測試",
+      "detail": "build 測試、iOS 18.1+ 支援裝置、不支援裝置、三語言收據、Android 支援裝置測試等，均需手動執行"
+    }
+  ],
+  "failed_approaches": [
+    {
+      "attempt": "google_mlkit_text_recognition 0.13.0 on iOS",
+      "why_failed": "CocoaPods GoogleUtilities 版本衝突：mlkit 要求 < 8.0，google_sign_in 要求 ~> 8.0",
+      "lesson": "升級至 ^0.15.1 解決；但 ML Kit Chinese script 在 iOS 上幾乎無法識別中文，最終改用 Apple Vision"
+    },
+    {
+      "attempt": "ML Kit TextRecognitionScript.chinese 在 iOS 做 OCR",
+      "why_failed": "實測完全無法識別中文字，只回傳亂碼 Latin 字符",
+      "lesson": "iOS 的中文 OCR 應使用 Apple Vision（VNRecognizeTextRequest），不要用 ML Kit"
+    },
+    {
+      "attempt": "將 CJK OCR 文字直接嵌入 LLM prompt",
+      "why_failed": "Apple Foundation Models 拒絕含繁體中文的 prompt，拋出 LanguageModelError.unsupportedLanguageOrLocale",
+      "lesson": "LLM prompt 只能送純 ASCII，CJK 內容需在 Dart 端用 regex 萃取"
+    },
+    {
+      "attempt": "非 ASCII 遮罩為 *** 後送 LLM 做 line_index 分類",
+      "why_failed": "小型 on-device LLM 對 *** 格式的 line_index 對應不可靠，文字-金額仍常對應錯誤",
+      "lesson": "最終解法：只送純數字給 LLM，名稱萃取完全由 regex 處理，不依賴 LLM 做文字理解"
+    },
+    {
+      "attempt": "Apple Vision 雙 pass OCR（中文優先 + 日文優先各跑一次）",
+      "why_failed": "兩次 OCR 結果合併後行號混亂（重複行），line_index 映射完全錯亂",
+      "lesson": "單 pass 即可，recognitionLanguages 陣列順序決定優先語言；[ja, zh-Hant, zh-Hans, en-US] 在多語言收據上表現足夠"
+    },
+    {
+      "attempt": "將 NativeOCR 實作放在獨立的 NativeOCR.swift 檔案",
+      "why_failed": "Xcode 沒有自動將新 .swift 檔加入 Runner target，導致 build error「Value of optional type must be unwrapped」等",
+      "lesson": "直接在 AppDelegate.swift 內嵌 OCR handler，避免 Xcode target membership 問題"
+    }
+  ],
+  "key_decisions": [
+    {
+      "decision": "iOS OCR 改用 Apple Vision，不用 ML Kit",
+      "reason": "ML Kit Chinese script 在 iOS 實測完全失效；Apple Vision 支援 ja/zh-Hant/zh-Hans/en-US 且精度遠勝",
+      "alternatives_rejected": ["ML Kit Chinese + Latin 雙 script", "Google Cloud Vision API（需網路）"]
+    },
+    {
+      "decision": "LLM prompt 只送純數字，名稱萃取由 Dart regex 處理",
+      "reason": "Apple Foundation Models 拒絕 CJK 輸入；小型 LLM 在結構化數字分類上比文字理解可靠",
+      "alternatives_rejected": ["送全部 OCR 文字（語言錯誤）", "非 ASCII 遮罩為 *** 送 LLM（line_index 對應不可靠）"]
+    },
+    {
+      "decision": "recognitionLanguages 順序為 [ja, zh-Hant, zh-Hans, en-US]",
+      "reason": "日文優先確保平假名/片假名被識別；zh-Hant 涵蓋繁體中文；單 pass 避免重複行",
+      "alternatives_rejected": ["zh-Hant 優先", "雙 pass 合併"]
+    },
+    {
+      "decision": "OCR channel 內嵌在 AppDelegate.swift，不另開 .swift 檔",
+      "reason": "避免 Xcode target membership 問題造成 build error",
+      "alternatives_rejected": ["獨立 NativeOCR.swift plugin 檔案"]
+    }
+  ],
+  "user_preferences": [
+    "iOS OCR 要支援繁中、日文（平假名/片假名/漢字）、英文",
+    "不希望依賴雲端 API，偏好 on-device 推論",
+    "收據掃描按鈕在不支援裝置上要隱藏，不要顯示下載提示"
+  ],
+  "key_files": {
+    "app/lib/features/expenses/data/datasources/receipt_scan_datasource.dart": "核心雙階段 pipeline：Vision OCR → 數字萃取 → LLM 分類 → 名稱映射",
+    "app/ios/Runner/AppDelegate.swift": "Apple Vision OCR method channel，語言設定 [ja, zh-Hant, zh-Hans, en-US]",
+    "app/lib/core/services/gemma_model_manager.dart": "封裝 FlutterLocalAi 可用性檢查",
+    "app/lib/features/expenses/presentation/providers/receipt_scan_provider.dart": "ScanStatus enum 含 notSupported 狀態",
+    "app/lib/features/expenses/presentation/screens/add_expense_screen.dart": "initState 檢查 AI 可用性，不支援時隱藏掃描按鈕"
+  },
+  "openspec_change": "receipt-ocr-scanning",
+  "openspec_progress": "tasks 1.1–9.3 全部完成（含 10.1 flutter analyze）；10.2–10.10 為手動測試項目，待實機驗證",
+  "handover_context": "收據掃描功能已完整替換為 flutter_local_ai + Apple Vision 架構。核心問題「文字與金額對應錯誤」已透過『數字專用 LLM prompt + Dart regex 名稱萃取』解決：OCR 得到的 CJK 文字由 _parseLineData() 用 regex 拆出名稱，只把數字送給 LLM，LLM 回傳 line_index 後再映射回名稱。下一步為實機測試（10.2–10.10），建議優先測三語言收據（繁中/日文/英文）確認 items + total 對應正確。"
+}

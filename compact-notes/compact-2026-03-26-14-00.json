@@ -1,0 +1,132 @@
+{
+  "L0": "UI 全面統一：按鈕規範、頁面排版、Sheet 化操作、選取元件可見度 — 已完成",
+  "compact_version": "2.0",
+  "timestamp": "2026-03-26T14:00:00+08:00",
+  "project": {
+    "name": "OkaeriSplit",
+    "path": "/Users/raychen/Documents/個人資料/OkaeriSplit",
+    "tech_stack": ["Dart", "Flutter", "Riverpod", "Supabase", "go_router"],
+    "description": "多人分帳 App，支援群組消費記錄、帳務結算、多幣別"
+  },
+  "session_goal": "統一整個 App 的 UI 視覺語言：按鈕樣式、頁面排版、互動元件一致性",
+  "completed": [
+    {
+      "task": "待辦頁面 list 外觀對齊群組清單",
+      "files": ["app/lib/features/dashboard/presentation/screens/dashboard_screen.dart"],
+      "detail": "改為獨立 Card、移除 divider、金額改中性色、同 section 合併為單一 Card"
+    },
+    {
+      "task": "GroupCard subtitle 改為建立年-月",
+      "files": ["app/lib/features/groups/presentation/widgets/group_card.dart", "app/lib/features/groups/presentation/screens/group_home_screen.dart"],
+      "detail": "顯示 YYYY-MM · 幣別，移除已棄用的 type.label"
+    },
+    {
+      "task": "群組頁消費列表水平 padding 修正",
+      "files": ["app/lib/features/groups/presentation/screens/group_home_screen.dart"],
+      "detail": "SliverPadding horizontal 16→20，對齊其他所有區域"
+    },
+    {
+      "task": "建立全域按鈕規範並套入 app_theme.dart",
+      "files": ["app/lib/core/theme/app_theme.dart"],
+      "detail": "新增 outlinedButtonTheme（height 52, radius 14）；OutlinedButton 邊框改 primary 色（WidgetStateBorderSide）；ChipTheme 未選取加 outlineVariant 邊框"
+    },
+    {
+      "task": "登入頁面按鈕清理",
+      "files": ["app/lib/features/auth/presentation/screens/login_screen.dart", "app/lib/features/auth/presentation/widgets/social_login_button.dart"],
+      "detail": "移除各按鈕多餘 SizedBox/styleFrom，走 theme；Google/Apple 按鈕邊框各自跟 foregroundColor"
+    },
+    {
+      "task": "註冊、訪客登入、忘記密碼頁面統一排版與按鈕",
+      "files": [
+        "app/lib/features/auth/presentation/screens/register_screen.dart",
+        "app/lib/features/auth/presentation/screens/guest_login_screen.dart",
+        "app/lib/features/auth/presentation/screens/forgot_password_screen.dart"
+      ],
+      "detail": "三頁統一為 icon→標題→說明→欄位→按鈕；ElevatedButton 全改 FilledButton；忘記密碼加 icon 並置中"
+    },
+    {
+      "task": "註冊頁改為 push 導航並支援左滑返回",
+      "files": ["app/lib/routing/app_router.dart", "app/lib/features/auth/presentation/screens/login_screen.dart", "app/lib/features/auth/presentation/screens/register_screen.dart"],
+      "detail": "/register、/guest-login 改 _slidePage；login 改 context.push；移除「已有帳號？登入」按鈕"
+    },
+    {
+      "task": "我的頁面登出/刪除帳號按鈕改 FilledButton",
+      "files": ["app/lib/features/profile/presentation/screens/profile_screen.dart"],
+      "detail": "登出用 primary（紫），刪除帳號用 error（紅），兩者皆 FilledButton"
+    },
+    {
+      "task": "建立群組改為 sheet 實作",
+      "files": [
+        "app/lib/features/groups/presentation/widgets/create_group_sheet.dart",
+        "app/lib/features/groups/presentation/screens/group_list_screen.dart",
+        "app/lib/routing/app_router.dart"
+      ],
+      "detail": "新增 CreateGroupSheet（對齊 JoinGroupDialog 結構）；移除 /groups/create route"
+    },
+    {
+      "task": "建立群組頁欄位統一高度",
+      "files": ["app/lib/features/groups/presentation/screens/create_group_screen.dart"],
+      "detail": "名稱改標準 TextFormField，幣別改 InkWell+InputDecorator，兩者走同一 InputDecorationTheme"
+    },
+    {
+      "task": "新增消費頁選取元件補上 outlineVariant 邊框",
+      "files": [
+        "app/lib/features/expenses/presentation/widgets/category_picker.dart",
+        "app/lib/features/expenses/presentation/screens/add_expense_screen.dart"
+      ],
+      "detail": "_CategoryTile 和 _MemberChip 未選取狀態加 outlineVariant 邊框"
+    },
+    {
+      "task": "新增自訂分類改為 sheet（圖示選取內嵌）",
+      "files": ["app/lib/features/expenses/presentation/screens/add_expense_screen.dart"],
+      "detail": "_AddCategoryDialog → _AddCategorySheet；圖示 grid 內嵌，省去巢狀 dialog"
+    }
+  ],
+  "in_progress": [],
+  "failed_approaches": [
+    {
+      "attempt": "以訪客身份進入改 TextButton + Google/Apple 左右並排",
+      "why_failed": "使用者覺得調整後沒有比較好",
+      "lesson": "登入頁按鈕布局維持現狀（全寬垂直排列），不要嘗試並排"
+    }
+  ],
+  "key_decisions": [
+    {
+      "decision": "按鈕三層規範：FilledButton=主要操作, OutlinedButton=次要操作, TextButton=第三層/連結",
+      "reason": "統一視覺層級，後續各頁面照此規範套用即可",
+      "alternatives_rejected": ["各頁面自行決定", "沿用現有混用方式"]
+    },
+    {
+      "decision": "OutlinedButton 邊框用 WidgetStateBorderSide 跟隨 primary 色",
+      "reason": "避免邊框與文字撞色（原本邊框 primary、文字 error 的奇怪組合）",
+      "alternatives_rejected": ["固定灰色邊框", "沿用 Material 3 預設 outline 色"]
+    },
+    {
+      "decision": "我的頁面登出用紫色、刪除帳號用紅色",
+      "reason": "使用者明確指定，errorContainer 太突兀",
+      "alternatives_rejected": ["兩個都用 errorContainer", "兩個都用 error 紅"]
+    },
+    {
+      "decision": "_AddCategorySheet 內嵌圖示 grid，不另開巢狀 sheet",
+      "reason": "省去多層操作，一個 sheet 完成整個流程",
+      "alternatives_rejected": ["圖示選取另開 sheet", "保留 IconPickerDialog 巢狀"]
+    }
+  ],
+  "user_preferences": [
+    "喜歡 sheet 風格操作（建立群組、加入群組、新增分類都改 sheet）",
+    "待辦清單金額不要紅綠色，已有 section 標題區分即可",
+    "按鈕顏色：登出紫色、刪除帳號紅色",
+    "登入頁按鈕維持全寬垂直排列，不要並排",
+    "頁面排版統一：icon → 標題 → 說明 → 欄位 → 按鈕",
+    "未選取的 chip/tile 需要有可見邊框（outlineVariant）"
+  ],
+  "key_files": {
+    "app/lib/core/theme/app_theme.dart": "全域 theme 定義，按鈕規範、chip 樣式都在這裡",
+    "app/lib/features/groups/presentation/widgets/create_group_sheet.dart": "新建立的建立群組 sheet，對齊 JoinGroupDialog 結構",
+    "app/lib/features/groups/presentation/widgets/join_group_dialog.dart": "加入群組 sheet，是所有新 sheet 的視覺參考範本",
+    "app/lib/features/auth/presentation/widgets/social_login_button.dart": "社群登入按鈕，邊框顏色跟隨 foregroundColor",
+    "app/lib/routing/app_router.dart": "/register、/guest-login 已改 _slidePage，/groups/create 已移除",
+    "app/lib/features/expenses/presentation/screens/add_expense_screen.dart": "_AddCategorySheet 和 _MemberChip 邊框修正都在此"
+  },
+  "handover_context": "這段對話完成了 OkaeriSplit App 的全面 UI 統一：按鈕規範已寫入 app_theme.dart（FilledButton/OutlinedButton/Chip 三套），auth 頁面排版統一，主要操作改 sheet，選取元件補上邊框。目前無未完成項目，建議下一步可繼續處理其他頁面的按鈕規範套用（例如 group_settings_screen、expense_detail_screen），或進行實機測試確認所有 sheet 鍵盤避讓正常。"
+}

@@ -145,36 +145,34 @@ class _ReceiptScanResultScreenState
 
   Widget _buildBody(ReceiptScanState scanState, ColorScheme colorScheme) {
     return switch (scanState.status) {
-      ScanStatus.modelNotDownloaded => _buildDownloadPrompt(colorScheme),
-      ScanStatus.downloading =>
-        _buildDownloadProgress(scanState, colorScheme),
+      ScanStatus.notSupported => _buildNotSupported(colorScheme),
       ScanStatus.idle || ScanStatus.scanning => _buildLoading(colorScheme),
       ScanStatus.error => _buildError(scanState, colorScheme),
       ScanStatus.success => _buildResult(colorScheme),
     };
   }
 
-  Widget _buildDownloadPrompt(ColorScheme colorScheme) {
+  Widget _buildNotSupported(ColorScheme colorScheme) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 64, color: colorScheme.primary),
+            Icon(Icons.smartphone_outlined,
+                size: 64, color: colorScheme.onSurfaceVariant),
             const SizedBox(height: 20),
             Text(
-              '需要下載 AI 模型',
+              '此裝置不支援 AI 辨識功能',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 12),
             Text(
-              '首次使用收據掃描需下載本地 AI 模型（約 3.1 GB），\n下載完成後即可完全離線使用。',
+              '收據掃描需要 iOS 18.1+（Apple Intelligence）\n或支援 Android AICore 的裝置。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -182,76 +180,10 @@ class _ReceiptScanResultScreenState
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '建議在 Wi-Fi 環境下載',
-              style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-              ),
-            ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: () => ref
-                  .read(receiptScanProvider.notifier)
-                  .downloadModelAndScan(widget.imageFile),
-              icon: const Icon(Icons.download_outlined),
-              label: const Text('下載並辨識'),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDownloadProgress(
-      ReceiptScanState scanState, ColorScheme colorScheme) {
-    final percent =
-        (scanState.downloadProgress * 100).toStringAsFixed(0);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 64, color: colorScheme.primary),
-            const SizedBox(height: 24),
-            Text(
-              '正在下載 AI 模型',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '約 3.1 GB，請保持網路連線',
-              style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 24),
-            LinearProgressIndicator(
-              value: scanState.downloadProgress,
-              backgroundColor:
-                  colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$percent%',
-              style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurfaceVariant,
-              ),
+              child: const Text('返回'),
             ),
           ],
         ),

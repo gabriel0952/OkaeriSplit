@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:app/features/expenses/presentation/screens/receipt_scan_result_screen.dart';
+import 'package:flutter_local_ai/flutter_local_ai.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -70,6 +71,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final List<String> _removedAttachmentUrls = [];
   final _imagePicker = ImagePicker();
 
+  bool _isAiAvailable = false;
+
   // Itemized split
   final List<_ItemEntry> _itemEntries = [];
 
@@ -79,6 +82,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
   // Available currencies are built dynamically in the build method
   // from the group base currency + currencies with exchange rates set.
+
+  @override
+  void initState() {
+    super.initState();
+    FlutterLocalAi().isAvailable().then((available) {
+      if (mounted) setState(() => _isAiAvailable = available);
+    });
+  }
 
   @override
   void dispose() {
@@ -402,7 +413,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   ),
                 ),
                 const Spacer(),
-                // Scan receipt button
+                // Scan receipt button — only shown on supported devices
+                if (_isAiAvailable)
                 GestureDetector(
                   onTap: _startReceiptScan,
                   child: Container(

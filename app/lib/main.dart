@@ -2,7 +2,6 @@ import 'package:app/core/constants/app_constants.dart';
 import 'package:app/core/providers/connectivity_provider.dart';
 import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/core/services/home_widget_service.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:app/core/theme/app_theme.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
@@ -42,12 +41,6 @@ void main() {
 
       // Check real connectivity before runApp so isOnline is accurate from start.
       await ConnectivityService.instance.init();
-
-      // Initialize FlutterGemma (required before any model API call)
-      const hfToken = String.fromEnvironment('HF_TOKEN', defaultValue: '');
-      await FlutterGemma.initialize(
-        huggingFaceToken: hfToken.isNotEmpty ? hfToken : null,
-      );
 
       // Initialize HomeWidget App Group
       await HomeWidgetService.instance.init();

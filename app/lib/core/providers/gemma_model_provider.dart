@@ -6,7 +6,3 @@ final gemmaModelManagerProvider = Provider<GemmaModelManager>((ref) {
   ref.onDispose(manager.dispose);
   return manager;
 });
-
-final modelDownloadStateProvider = StreamProvider<ModelDownloadState>((ref) {
-  return ref.watch(gemmaModelManagerProvider).stateStream;
-});
