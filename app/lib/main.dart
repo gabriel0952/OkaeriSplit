@@ -52,7 +52,9 @@ void main() {
       // uriLinkStream after already consuming it via getInitialAppLink,
       // causing an unhandled otp_expired AuthException. Suppress it.
       if (error is AuthException && error.statusCode == 'otp_expired') return;
-      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: error, stack: stack),
+      );
     },
   );
 }
@@ -105,9 +107,7 @@ class _OkaeriSplitAppState extends ConsumerState<OkaeriSplitApp>
     } on AuthException catch (_) {
       // Refresh token rejected — account was deleted. Sign out locally so
       // SIGNED_OUT is emitted and the router redirects to /login.
-      await Supabase.instance.client.auth.signOut(
-        scope: SignOutScope.local,
-      );
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
     }
     // Other exceptions (e.g. network) are ignored — don't sign out offline users.
   }
@@ -131,10 +131,7 @@ class _OkaeriSplitAppState extends ConsumerState<OkaeriSplitApp>
       routerConfig: router,
       debugShowCheckedModeBanner: false,
       locale: const Locale('zh', 'TW'),
-      supportedLocales: const [
-        Locale('zh', 'TW'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('zh', 'TW'), Locale('en', 'US')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

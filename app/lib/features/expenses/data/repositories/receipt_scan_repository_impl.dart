@@ -12,9 +12,15 @@ class ReceiptScanRepositoryImpl implements ReceiptScanRepository {
   final ReceiptScanDatasource _datasource;
 
   @override
-  Future<AppResult<ScanResultEntity>> scanReceipt(File imageFile) async {
+  Future<AppResult<ScanResultEntity>> scanReceipt(
+    File imageFile, {
+    OcrLanguage language = OcrLanguage.auto,
+  }) async {
     try {
-      final result = await _datasource.scanReceipt(imageFile);
+      final result = await _datasource.scanReceipt(
+        imageFile,
+        language: language,
+      );
       return Right(result);
     } on StateError catch (e) {
       return Left(ServerFailure('模型未就緒：${e.message}'));

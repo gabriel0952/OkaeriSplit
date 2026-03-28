@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.dart';
 import 'package:app/features/expenses/presentation/screens/receipt_scan_result_screen.dart';
 import 'package:flutter_local_ai/flutter_local_ai.dart';
 import 'package:image_picker/image_picker.dart';
@@ -669,7 +670,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         if (amount > 0 && count > 0) {
           final perPerson = SplitCalculator.calculateEqualSplits(amount, count);
           final perPersonAmt = perPerson.isNotEmpty ? perPerson.first : 0.0;
-          summary = '平均分給 $count 人，每人 ${_selectedCurrency} ${perPersonAmt.toStringAsFixed(2)}';
+          summary = '平均分給 $count 人，每人 $_selectedCurrency ${perPersonAmt.toStringAsFixed(2)}';
         } else {
           summary = '平均分給 $count 人';
         }
@@ -981,7 +982,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               ),
             ),
             Text(
-              amount > 0 ? '${_selectedCurrency} ${splitAmt.toStringAsFixed(2)}' : '',
+              amount > 0 ? '$_selectedCurrency ${splitAmt.toStringAsFixed(2)}' : '',
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 color: colorScheme.onSurface,
@@ -1048,7 +1049,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             SizedBox(
               width: 76,
               child: Text(
-                amount > 0 ? '${_selectedCurrency} ${splitAmount.toStringAsFixed(2)}' : '',
+                amount > 0 ? '$_selectedCurrency ${splitAmount.toStringAsFixed(2)}' : '',
                 textAlign: TextAlign.right,
                 style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
@@ -1090,7 +1091,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     isDense: true,
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    prefixText: '${_selectedCurrency} ',
+                    prefixText: '$_selectedCurrency ',
                     border: inputBorder,
                     enabledBorder: inputBorder,
                     focusedBorder: OutlineInputBorder(
@@ -1130,8 +1131,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       padding: const EdgeInsets.only(top: 4),
       child: Text(
         diff > 0
-            ? '還差 ${_selectedCurrency} ${diff.toStringAsFixed(2)} 未分配'
-            : '超出 ${_selectedCurrency} ${diff.abs().toStringAsFixed(2)}',
+            ? '還差 $_selectedCurrency ${diff.toStringAsFixed(2)} 未分配'
+            : '超出 $_selectedCurrency ${diff.abs().toStringAsFixed(2)}',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 13,
@@ -1226,7 +1227,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       decoration: InputDecoration(
                         labelText: '金額',
                         labelStyle: const TextStyle(fontSize: 12),
-                        prefixText: '${_selectedCurrency} ',
+                        prefixText: '$_selectedCurrency ',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 6),
@@ -1321,8 +1322,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       padding: const EdgeInsets.only(top: 8),
       child: Text(
         diff > 0
-            ? '還差 ${_selectedCurrency} ${diff.toStringAsFixed(2)} 未分配'
-            : '超出 ${_selectedCurrency} ${diff.abs().toStringAsFixed(2)}',
+            ? '還差 $_selectedCurrency ${diff.toStringAsFixed(2)} 未分配'
+            : '超出 $_selectedCurrency ${diff.abs().toStringAsFixed(2)}',
         style: TextStyle(
           color: Theme.of(context).colorScheme.error,
           fontSize: 13,
@@ -1434,45 +1435,80 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   // ─── Receipt Scan ─────────────────────────────────────────────────────────
 
   Future<void> _startReceiptScan() async {
-    // Step 1: Pick image source
-    final source = await showModalBottomSheet<ImageSource>(
+    // Step 1: Pick image source + receipt language
+    final selection = await showModalBottomSheet<({ImageSource source, OcrLanguage language})>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => GlassSheetWrapper(
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Text(
-                  '掃描收據',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+      builder: (context) {
+        var selectedLanguage = OcrLanguage.auto;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => GlassSheetWrapper(
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(
+                      '掃描收據',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  // Language selector
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        Text('語言：',
+                            style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SegmentedButton<OcrLanguage>(
+                            segments: const [
+                              ButtonSegment(value: OcrLanguage.auto, label: Text('自動')),
+                              ButtonSegment(value: OcrLanguage.chinese, label: Text('中文')),
+                              ButtonSegment(value: OcrLanguage.japanese, label: Text('日文')),
+                              ButtonSegment(value: OcrLanguage.english, label: Text('英文')),
+                            ],
+                            selected: {selectedLanguage},
+                            onSelectionChanged: (s) =>
+                                setSheetState(() => selectedLanguage = s.first),
+                            style: const ButtonStyle(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 8),
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt_outlined),
+                    title: const Text('拍照'),
+                    onTap: () => Navigator.pop(
+                        context, (source: ImageSource.camera, language: selectedLanguage)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_outlined),
+                    title: const Text('從相簿選取'),
+                    onTap: () => Navigator.pop(
+                        context, (source: ImageSource.gallery, language: selectedLanguage)),
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('拍照'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('從相簿選取'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
-    if (source == null) return;
+    if (selection == null) return;
 
     // Step 2: Pick image
     final picked = await _imagePicker.pickImage(
-      source: source,
+      source: selection.source,
       maxWidth: 1920,
       maxHeight: 1920,
       imageQuality: 85,
@@ -1480,10 +1516,23 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     if (picked == null || !mounted) return;
 
     // Step 3: Navigate to scan result screen
+    final members = ref.read(groupMembersProvider(widget.groupId)).valueOrNull ?? [];
+    final groupCurrency = ref.read(groupDetailProvider(widget.groupId)).valueOrNull?.currency
+        ?? AppConstants.defaultCurrency;
+    final exchangeRateCurrencies = ref.read(groupExchangeRatesProvider(widget.groupId))
+            .valueOrNull
+            ?.map((r) => r.currency)
+            .toList() ??
+        [];
+    final availableCurrencies = [groupCurrency, ...exchangeRateCurrencies];
     final importData = await Navigator.of(context).push<ReceiptImportData>(
       MaterialPageRoute(
         builder: (_) => ReceiptScanResultScreen(
           imageFile: File(picked.path),
+          language: selection.language,
+          members: members,
+          availableCurrencies: availableCurrencies,
+          initialCurrency: _selectedCurrency ?? groupCurrency,
         ),
       ),
     );
@@ -1518,12 +1567,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         _itemEntries.clear();
 
         // Populate from scan result
-        // Get current group members for sharedByUserIds
-        final membersAsync = ref.read(groupMembersProvider(widget.groupId));
-        final members = membersAsync.valueOrNull ?? [];
-        final allMemberIds = members.map((m) => m.userId).toSet();
+        // Get current group members for sharedByUserIds fallback
+        final allMemberIds = ref.read(groupMembersProvider(widget.groupId))
+            .valueOrNull
+            ?.map((m) => m.userId)
+            .toSet() ?? {};
 
-        for (final item in data.items) {
+        for (var i = 0; i < data.items.length; i++) {
+          final item = data.items[i];
+          final assignedIds = i < data.itemMemberIds.length && data.itemMemberIds[i].isNotEmpty
+              ? data.itemMemberIds[i]
+              : Set.of(allMemberIds);
           _itemEntries.add(_ItemEntry(
             nameController: TextEditingController(text: item.name),
             amountController: TextEditingController(
@@ -1533,8 +1587,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     )
                   : '',
             ),
-            sharedByUserIds: Set.of(allMemberIds),
+            sharedByUserIds: assignedIds,
           ));
+        }
+
+        // Apply currency from receipt screen if provided
+        if (data.currency != null) {
+          _selectedCurrency = data.currency;
         }
       }
 

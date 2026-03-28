@@ -37,13 +37,54 @@ import Vision
             result(FlutterError(code: "OCR_ERROR", message: error.localizedDescription, details: nil))
             return
           }
-          let text = (req.results as? [VNRecognizedTextObservation] ?? [])
-            .compactMap { $0.topCandidates(1).first?.string }
-            .joined(separator: "\n")
+          let observations = (req.results as? [VNRecognizedTextObservation] ?? [])
+            .sorted { $0.boundingBox.midY > $1.boundingBox.midY }
+
+          // Adaptive threshold: 55% of the median observation height.
+          // This keeps same-line fragments together while separating adjacent lines,
+          // regardless of font size or receipt orientation.
+          let heights = observations.map { $0.boundingBox.height }.sorted()
+          let medianHeight: CGFloat = heights.isEmpty ? 0.02
+              : heights[heights.count / 2]
+          let yThreshold = medianHeight * 0.55
+
+          var rows: [[VNRecognizedTextObservation]] = []
+          for obs in observations {
+            if let lastRow = rows.last,
+               let lastObs = lastRow.last,
+               abs(obs.boundingBox.midY - lastObs.boundingBox.midY) < yThreshold {
+              rows[rows.count - 1].append(obs)
+            } else {
+              rows.append([obs])
+            }
+          }
+
+          var text = rows.map { row in
+            row.sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+               .compactMap { $0.topCandidates(1).first?.string }
+               .joined(separator: "  ")
+          }.joined(separator: "\n")
+
+          // Re-join numbers split at a thousands comma by Vision:
+          // "4  ,455" → "4,455"
+          if let regex = try? NSRegularExpression(pattern: #"(\d)\s+,(\d{3})"#) {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(
+              in: text, range: range, withTemplate: "$1,$2")
+          }
+
           result(text)
         }
-        // ja first so kana is prioritised; zh-Hant covers Traditional Chinese
-        request.recognitionLanguages = ["ja", "zh-Hant", "zh-Hans", "en-US"]
+        // Language priority based on caller hint
+        let lang = args["language"] as? String ?? "auto"
+        switch lang {
+        case "chinese":
+          request.recognitionLanguages = ["zh-Hant", "zh-Hans", "ja", "en-US"]
+        case "english":
+          request.recognitionLanguages = ["en-US", "zh-Hant", "zh-Hans", "ja"]
+        default: // "auto" or "japanese"
+          request.recognitionLanguages = ["ja", "zh-Hant", "zh-Hans", "en-US"]
+        }
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
 

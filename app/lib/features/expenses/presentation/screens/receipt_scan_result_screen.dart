@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.dart';
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
 import 'package:app/features/expenses/presentation/providers/receipt_scan_provider.dart';
+import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,20 +14,43 @@ class ReceiptImportData {
     required this.items,
     required this.total,
     required this.imageFile,
+    this.currency,
+    this.itemMemberIds = const [],
   });
 
   final List<ScanResultItemEntity> items;
   final double total;
   final File imageFile;
+
+  /// Selected currency, null = keep AddExpenseScreen's current currency.
+  final String? currency;
+
+  /// Per-item member assignment (parallel to [items]).
+  /// Empty set = all members (default).
+  final List<Set<String>> itemMemberIds;
 }
 
 class ReceiptScanResultScreen extends ConsumerStatefulWidget {
   const ReceiptScanResultScreen({
     super.key,
     required this.imageFile,
+    this.language = OcrLanguage.auto,
+    this.members = const [],
+    this.availableCurrencies = const [],
+    this.initialCurrency,
   });
 
   final File imageFile;
+  final OcrLanguage language;
+
+  /// Group members for per-item assignment. Empty = hide member UI.
+  final List<GroupMemberEntity> members;
+
+  /// Currencies the user can pick for this receipt.
+  final List<String> availableCurrencies;
+
+  /// Pre-selected currency (the group / expense currency).
+  final String? initialCurrency;
 
   @override
   ConsumerState<ReceiptScanResultScreen> createState() =>
@@ -35,15 +60,20 @@ class ReceiptScanResultScreen extends ConsumerStatefulWidget {
 class _ReceiptScanResultScreenState
     extends ConsumerState<ReceiptScanResultScreen> {
   List<ScanResultItemEntity> _items = [];
+  List<UniqueKey> _itemKeys = [];
+  List<Set<String>> _itemMemberIds = [];
   double _total = 0;
   bool _totalManuallyEdited = false;
+  bool _lowConfidence = false;
+  String? _currency;
   final _totalController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _currency = widget.initialCurrency;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(receiptScanProvider.notifier).scan(widget.imageFile);
+      _rescan();
     });
   }
 
@@ -53,12 +83,20 @@ class _ReceiptScanResultScreenState
     super.dispose();
   }
 
+  Set<String> get _allMemberIds => widget.members.map((m) => m.userId).toSet();
+
   void _onScanResult(ScanResultEntity result) {
     setState(() {
       _items = List.of(result.items);
+      _itemKeys = List.generate(_items.length, (_) => UniqueKey());
+      _itemMemberIds = List.generate(
+        _items.length,
+        (_) => Set.of(_allMemberIds),
+      );
       _total = result.total;
       _totalController.text = _total > 0 ? _total.toStringAsFixed(0) : '';
       _totalManuallyEdited = false;
+      _lowConfidence = result.lowConfidence;
     });
   }
 
@@ -73,13 +111,19 @@ class _ReceiptScanResultScreenState
   }
 
   void _deleteItem(int index) {
-    setState(() => _items.removeAt(index));
+    setState(() {
+      _items.removeAt(index);
+      _itemKeys.removeAt(index);
+      _itemMemberIds.removeAt(index);
+    });
     _recalculateTotal();
   }
 
   void _addEmptyItem() {
     setState(() {
-      _items.add(const ScanResultItemEntity(name: '', amount: 0));
+      _items.insert(0, const ScanResultItemEntity(name: '', amount: 0));
+      _itemKeys.insert(0, UniqueKey());
+      _itemMemberIds.insert(0, Set.of(_allMemberIds));
     });
   }
 
@@ -88,8 +132,13 @@ class _ReceiptScanResultScreenState
     _recalculateTotal();
   }
 
+  void _updateItemMembers(int index, Set<String> memberIds) {
+    setState(() => _itemMemberIds[index] = memberIds);
+  }
+
   void _import() {
-    final total = double.tryParse(
+    final total =
+        double.tryParse(
           _totalController.text.replaceAll(RegExp(r'[,，]'), ''),
         ) ??
         _total;
@@ -98,6 +147,65 @@ class _ReceiptScanResultScreenState
         items: _items,
         total: total,
         imageFile: widget.imageFile,
+        currency: _currency,
+        itemMemberIds: List.of(_itemMemberIds),
+      ),
+    );
+  }
+
+  void _showFullscreenPhoto() {
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (ctx, anim1, anim2) =>
+          _FullscreenPhotoDialog(imageFile: widget.imageFile),
+      transitionBuilder: (ctx, anim, _, child) =>
+          FadeTransition(opacity: anim, child: child),
+    );
+  }
+
+  void _rescan() => ref
+      .read(receiptScanProvider.notifier)
+      .scan(widget.imageFile, language: widget.language);
+
+  Future<void> _showCurrencyPicker() async {
+    if (widget.availableCurrencies.length <= 1) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Text(
+                '選擇幣別',
+                style: Theme.of(
+                  ctx,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            ...widget.availableCurrencies.map(
+              (c) => ListTile(
+                title: Text(c),
+                trailing: _currency == c
+                    ? Icon(
+                        Icons.check_rounded,
+                        color: Theme.of(ctx).colorScheme.primary,
+                      )
+                    : null,
+                onTap: () {
+                  setState(() => _currency = c);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -117,12 +225,11 @@ class _ReceiptScanResultScreenState
       appBar: AppBar(
         title: const Text('掃描結果'),
         actions: [
-          if (scanState.status == ScanStatus.error)
+          if (scanState.status != ScanStatus.scanning)
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: '重新掃描',
-              onPressed: () =>
-                  ref.read(receiptScanProvider.notifier).scan(widget.imageFile),
+              onPressed: _rescan,
             ),
         ],
       ),
@@ -130,8 +237,10 @@ class _ReceiptScanResultScreenState
       bottomNavigationBar: scanState.status == ScanStatus.success
           ? SafeArea(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: FilledButton.icon(
                   onPressed: _import,
                   icon: const Icon(Icons.check),
@@ -152,6 +261,8 @@ class _ReceiptScanResultScreenState
     };
   }
 
+  // ── State screens ──────────────────────────────────────────────────────────
+
   Widget _buildNotSupported(ColorScheme colorScheme) {
     return Center(
       child: Padding(
@@ -159,8 +270,11 @@ class _ReceiptScanResultScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smartphone_outlined,
-                size: 64, color: colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.smartphone_outlined,
+              size: 64,
+              color: colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 20),
             Text(
               '此裝置不支援 AI 辨識功能',
@@ -172,7 +286,7 @@ class _ReceiptScanResultScreenState
             ),
             const SizedBox(height: 12),
             Text(
-              '收據掃描需要 iOS 18.1+（Apple Intelligence）\n或支援 Android AICore 的裝置。',
+              '收據掃描需要 iOS 16+ (Apple Vision)\n或支援 ML Kit 的 Android 裝置。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -194,32 +308,15 @@ class _ReceiptScanResultScreenState
   Widget _buildLoading(ColorScheme colorScheme) {
     return Column(
       children: [
-        Container(
-          height: 200,
-          width: double.infinity,
-          margin: const EdgeInsets.all(16),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: colorScheme.surfaceContainerHighest,
-          ),
-          child: Image.file(
-            widget.imageFile,
-            fit: BoxFit.cover,
-            opacity: const AlwaysStoppedAnimation(0.5),
-          ),
-        ),
-        const SizedBox(height: 24),
+        _buildPhotoPreview(colorScheme, dimmed: true),
+        const SizedBox(height: 32),
         const CircularProgressIndicator(),
         const SizedBox(height: 16),
         Text(
           'AI 正在分析收據...',
-          style: TextStyle(
-            fontSize: 16,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           '首次分析可能需要較長時間',
           style: TextStyle(
@@ -243,15 +340,11 @@ class _ReceiptScanResultScreenState
             Text(
               scanState.errorMessage ?? '辨識失敗',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: colorScheme.onSurface,
-              ),
+              style: TextStyle(fontSize: 16, color: colorScheme.onSurface),
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () =>
-                  ref.read(receiptScanProvider.notifier).scan(widget.imageFile),
+              onPressed: _rescan,
               icon: const Icon(Icons.refresh),
               label: const Text('重新辨識'),
             ),
@@ -266,27 +359,181 @@ class _ReceiptScanResultScreenState
     );
   }
 
-  Widget _buildResult(ColorScheme colorScheme) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-      children: [
-        Container(
-          height: 120,
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 16),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: colorScheme.surfaceContainerHighest,
-          ),
-          child: Image.file(widget.imageFile, fit: BoxFit.cover),
-        ),
+  // ── Result screen ──────────────────────────────────────────────────────────
 
-        // Total amount
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+  Widget _buildResult(ColorScheme colorScheme) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+        children: [
+          // ── Photo preview ──────────────────────────────────────────────────
+          _buildPhotoPreview(colorScheme),
+          const SizedBox(height: 12),
+
+          // ── Low-confidence warning ─────────────────────────────────────────
+          if (_lowConfidence) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: colorScheme.onErrorContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '辨識結果可能不完整，請確認品項與金額後再匯入。',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          // ── Total + currency ───────────────────────────────────────────────
+          _buildTotalCard(colorScheme),
+          const SizedBox(height: 12),
+
+          // ── Items header ───────────────────────────────────────────────────
+          Row(
+            children: [
+              Text(
+                '品項 (${_items.length})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _addEmptyItem,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新增品項'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // ── Item cards ─────────────────────────────────────────────────────
+          ...List.generate(_items.length, (index) {
+            return _ItemCard(
+              key: _itemKeys[index],
+              item: _items[index],
+              memberIds: _itemMemberIds[index],
+              allMembers: widget.members,
+              currency: _currency,
+              onChanged: (updated) => _updateItem(index, updated),
+              onMembersChanged: (ids) => _updateItemMembers(index, ids),
+              onDelete: () => _deleteItem(index),
+            );
+          }),
+
+          if (_items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: 48,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '未辨識到品項，可手動新增',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoPreview(ColorScheme colorScheme, {bool dimmed = false}) {
+    return GestureDetector(
+      onTap: dimmed ? null : _showFullscreenPhoto,
+      child: Container(
+        height: 220,
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: colorScheme.surfaceContainerHighest,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.file(
+              widget.imageFile,
+              fit: BoxFit.cover,
+              opacity: AlwaysStoppedAnimation(dimmed ? 0.4 : 1.0),
+            ),
+            if (!dimmed)
+              Positioned(
+                bottom: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in, size: 14, color: Colors.white),
+                      SizedBox(width: 4),
+                      Text(
+                        '點擊放大',
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTotalCard(ColorScheme colorScheme) {
+    final hasCurrencyChoice = widget.availableCurrencies.length > 1;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          children: [
+            Row(
               children: [
                 Text(
                   '總金額',
@@ -297,18 +544,30 @@ class _ReceiptScanResultScreenState
                   ),
                 ),
                 const Spacer(),
+                if (_currency != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(
+                      _currency!,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 SizedBox(
-                  width: 140,
+                  width: 120,
                   child: TextField(
                     controller: _totalController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[\d.,，]')),
                     ],
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 26,
                       fontWeight: FontWeight.w700,
                       color: colorScheme.primary,
                     ),
@@ -330,77 +589,76 @@ class _ReceiptScanResultScreenState
                 ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        Row(
-          children: [
-            Text(
-              '品項 (${_items.length})',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _addEmptyItem,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('新增品項'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-
-        ...List.generate(_items.length, (index) {
-          return _ItemTile(
-            key: ValueKey('item_$index'),
-            item: _items[index],
-            onChanged: (updated) => _updateItem(index, updated),
-            onDelete: () => _deleteItem(index),
-          );
-        }),
-
-        if (_items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: Text(
-                '未辨識到品項，可手動新增',
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            if (hasCurrencyChoice) ...[
+              const Divider(height: 20),
+              InkWell(
+                onTap: _showCurrencyPicker,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        '幣別',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _currency ?? '',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-      ],
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _ItemTile extends StatefulWidget {
-  const _ItemTile({
+// ─── Item card ────────────────────────────────────────────────────────────────
+
+class _ItemCard extends StatefulWidget {
+  const _ItemCard({
     super.key,
     required this.item,
+    required this.memberIds,
+    required this.allMembers,
     required this.onChanged,
+    required this.onMembersChanged,
     required this.onDelete,
+    this.currency,
   });
 
   final ScanResultItemEntity item;
+  final Set<String> memberIds;
+  final List<GroupMemberEntity> allMembers;
+  final String? currency;
   final ValueChanged<ScanResultItemEntity> onChanged;
+  final ValueChanged<Set<String>> onMembersChanged;
   final VoidCallback onDelete;
 
   @override
-  State<_ItemTile> createState() => _ItemTileState();
+  State<_ItemCard> createState() => _ItemCardState();
 }
 
-class _ItemTileState extends State<_ItemTile> {
+class _ItemCardState extends State<_ItemCard> {
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
 
@@ -425,21 +683,54 @@ class _ItemTileState extends State<_ItemTile> {
   }
 
   void _notifyChange() {
-    final amount = double.tryParse(
+    final amount =
+        double.tryParse(
           _amountController.text.replaceAll(RegExp(r'[,，]'), ''),
         ) ??
         0;
     widget.onChanged(
-      widget.item.copyWith(
-        name: _nameController.text,
-        amount: amount,
+      widget.item.copyWith(name: _nameController.text, amount: amount),
+    );
+  }
+
+  String _memberLabel() {
+    if (widget.allMembers.isEmpty) return '';
+    final allIds = widget.allMembers.map((m) => m.userId).toSet();
+    final selected = widget.memberIds;
+    if (selected.isEmpty || selected.containsAll(allIds)) {
+      return '全部 ${widget.allMembers.length} 人';
+    }
+    final names = widget.allMembers
+        .where((m) => selected.contains(m.userId))
+        .map((m) => m.displayName)
+        .toList();
+    if (names.length <= 2) return names.join('、');
+    return '${names.take(2).join('、')} 等 ${names.length} 人';
+  }
+
+  Future<void> _showMemberPicker() async {
+    final current = Set<String>.of(widget.memberIds);
+    final allMembers = widget.allMembers;
+    if (allMembers.isEmpty) return;
+
+    final result = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _MemberPickerSheet(
+        allMembers: allMembers,
+        selected: current,
+        itemName: widget.item.name,
       ),
     );
+    if (result != null) {
+      widget.onMembersChanged(result);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final showMembers = widget.allMembers.isNotEmpty;
 
     return Dismissible(
       key: widget.key!,
@@ -447,83 +738,461 @@ class _ItemTileState extends State<_ItemTile> {
       onDismissed: (_) => widget.onDelete(),
       background: Container(
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
-        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: Icon(Icons.delete, color: colorScheme.onErrorContainer),
+        child: Icon(Icons.delete_outline, color: colorScheme.onErrorContainer),
       ),
       child: Card(
-        margin: const EdgeInsets.only(bottom: 4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _nameController,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: colorScheme.onSurface,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    isDense: true,
-                    hintText: '品項名稱',
-                    hintStyle: TextStyle(
-                      color:
-                          colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+        margin: const EdgeInsets.only(bottom: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: Column(
+          children: [
+            // ── Main row ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name field
+                  Expanded(
+                    child: TextField(
+                      controller: _nameController,
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: colorScheme.onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        isDense: true,
+                        hintText: '品項名稱',
+                        hintStyle: TextStyle(
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                      ),
+                      minLines: 1,
+                      maxLines: 2,
+                      textInputAction: TextInputAction.done,
+                      onChanged: (_) => _notifyChange(),
+                      onSubmitted: (_) => _notifyChange(),
                     ),
                   ),
-                  onChanged: (_) => _notifyChange(),
+                  const SizedBox(width: 12),
+                  // Amount + delete column
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.item.quantity > 1)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'x${widget.item.quantity}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
+                          SizedBox(
+                            width: 100,
+                            child: TextField(
+                              controller: _amountController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[\d.,，]'),
+                                ),
+                              ],
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: colorScheme.primary,
+                              ),
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                isDense: true,
+                                hintText: '0',
+                                hintStyle: TextStyle(
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.4),
+                                ),
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onChanged: (_) => _notifyChange(),
+                              onSubmitted: (_) => _notifyChange(),
+                            ),
+                          ),
+                          // Delete button
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: widget.onDelete,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(
+                                Icons.close,
+                                size: 18,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Member row (visible when members exist) ───────────────────
+            if (showMembers) ...[
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+              InkWell(
+                onTap: _showMemberPicker,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.group_outlined,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _memberLabel(),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              if (widget.item.quantity > 1)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'x${widget.item.quantity}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colorScheme.onSecondaryContainer,
-                    ),
-                  ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Member picker bottom sheet ───────────────────────────────────────────────
+
+class _MemberPickerSheet extends StatefulWidget {
+  const _MemberPickerSheet({
+    required this.allMembers,
+    required this.selected,
+    required this.itemName,
+  });
+
+  final List<GroupMemberEntity> allMembers;
+  final Set<String> selected;
+  final String itemName;
+
+  @override
+  State<_MemberPickerSheet> createState() => _MemberPickerSheetState();
+}
+
+class _MemberPickerSheetState extends State<_MemberPickerSheet> {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set.of(widget.selected);
+  }
+
+  void _toggle(String userId) {
+    setState(() {
+      if (_selected.contains(userId)) {
+        _selected.remove(userId);
+      } else {
+        _selected.add(userId);
+      }
+    });
+  }
+
+  void _toggleAll() {
+    setState(() {
+      if (_selected.length == widget.allMembers.length) {
+        _selected.clear();
+      } else {
+        _selected = widget.allMembers.map((m) => m.userId).toSet();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final allSelected = _selected.length == widget.allMembers.length;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              SizedBox(
-                width: 90,
-                child: TextField(
-                  controller: _amountController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[\d.,，]')),
-                  ],
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.primary,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    isDense: true,
-                    hintText: '0',
-                    hintStyle: TextStyle(
-                      color:
-                          colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '分攤成員',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        if (widget.itemName.isNotEmpty)
+                          Text(
+                            widget.itemName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
                   ),
-                  onChanged: (_) => _notifyChange(),
+                  TextButton(
+                    onPressed: _toggleAll,
+                    child: Text(allSelected ? '取消全選' : '全選'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.allMembers.map((member) {
+                  final isSelected = _selected.contains(member.userId);
+                  final name = member.displayName;
+                  return GestureDetector(
+                    onTap: () => _toggle(member.userId),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.surfaceContainerHighest.withValues(
+                                alpha: 0.6,
+                              ),
+                        borderRadius: BorderRadius.circular(20),
+                        border: isSelected
+                            ? null
+                            : Border.all(
+                                color: colorScheme.outlineVariant,
+                                width: 1.5,
+                              ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: isSelected
+                                ? Colors.white.withValues(alpha: 0.3)
+                                : colorScheme.primaryContainer,
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
+                                    ? Colors.white
+                                    : colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isSelected
+                                  ? Colors.white
+                                  : colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: FilledButton(
+                onPressed: _selected.isEmpty
+                    ? null
+                    : () => Navigator.of(context).pop(_selected),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text('確認'),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Fullscreen photo dialog with swipe-to-dismiss ────────────────────────────
+
+class _FullscreenPhotoDialog extends StatefulWidget {
+  const _FullscreenPhotoDialog({required this.imageFile});
+  final File imageFile;
+
+  @override
+  State<_FullscreenPhotoDialog> createState() => _FullscreenPhotoDialogState();
+}
+
+class _FullscreenPhotoDialogState extends State<_FullscreenPhotoDialog> {
+  final _transformController = TransformationController();
+  double _dragY = 0;
+  bool _dragging = false;
+
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  bool get _isAtDefaultScale =>
+      _transformController.value.getMaxScaleOnAxis() <= 1.05;
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    if (_isAtDefaultScale) setState(() => _dragY += d.delta.dy);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    if (_dragY.abs() > 80 || (d.primaryVelocity ?? 0).abs() > 600) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() {
+        _dragY = 0;
+        _dragging = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bgOpacity = (1.0 - (_dragY.abs() / 280)).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => setState(() => _dragging = true),
+      onVerticalDragUpdate: _onDragUpdate,
+      onVerticalDragEnd: _onDragEnd,
+      child: AnimatedContainer(
+        duration: _dragging ? Duration.zero : const Duration(milliseconds: 200),
+        color: Colors.black.withValues(alpha: bgOpacity),
+        child: Transform.translate(
+          offset: Offset(0, _dragY),
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  transformationController: _transformController,
+                  minScale: 0.5,
+                  maxScale: 6.0,
+                  child: Image.file(widget.imageFile),
+                ),
+              ),
+              SafeArea(
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black54,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
                 ),
               ),
             ],

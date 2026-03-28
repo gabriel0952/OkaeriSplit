@@ -5,7 +5,6 @@ import 'package:app/features/expenses/data/repositories/receipt_scan_repository_
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
 import 'package:app/features/expenses/domain/repositories/receipt_scan_repository.dart';
 import 'package:app/features/expenses/domain/usecases/scan_receipt.dart';
-import 'package:flutter_local_ai/flutter_local_ai.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Infrastructure
@@ -54,21 +53,20 @@ class ReceiptScanNotifier extends StateNotifier<ReceiptScanState> {
 
   final ScanReceipt _scanReceipt;
 
-  /// Initiates a scan. Checks device availability first; if not supported,
-  /// transitions to [ScanStatus.notSupported].
-  Future<void> scan(File imageFile) async {
-    final available = await FlutterLocalAi().isAvailable();
-    if (!available) {
-      state = const ReceiptScanState(status: ScanStatus.notSupported);
-      return;
-    }
-    await _runScan(imageFile);
+  Future<void> scan(
+    File imageFile, {
+    OcrLanguage language = OcrLanguage.auto,
+  }) async {
+    await _runScan(imageFile, language: language);
   }
 
-  Future<void> _runScan(File imageFile) async {
+  Future<void> _runScan(
+    File imageFile, {
+    OcrLanguage language = OcrLanguage.auto,
+  }) async {
     state = const ReceiptScanState(status: ScanStatus.scanning);
 
-    final result = await _scanReceipt(imageFile: imageFile);
+    final result = await _scanReceipt(imageFile: imageFile, language: language);
 
     state = result.fold(
       (failure) => ReceiptScanState(
@@ -94,7 +92,7 @@ class ReceiptScanNotifier extends StateNotifier<ReceiptScanState> {
 
 final receiptScanProvider =
     StateNotifierProvider.autoDispose<ReceiptScanNotifier, ReceiptScanState>((
-  ref,
-) {
-  return ReceiptScanNotifier(ref.watch(scanReceiptUseCaseProvider));
-});
+      ref,
+    ) {
+      return ReceiptScanNotifier(ref.watch(scanReceiptUseCaseProvider));
+    });
