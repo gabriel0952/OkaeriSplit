@@ -14,6 +14,7 @@ class UpdateExpense {
     String? note,
     required DateTime expenseDate,
     List<Map<String, dynamic>>? splits,
+    List<Map<String, dynamic>>? items,
   }) {
     return _repository.updateExpense(
       expenseId: expenseId,
@@ -24,6 +25,7 @@ class UpdateExpense {
       note: note,
       expenseDate: expenseDate,
       splits: splits,
+      items: items,
     );
   }
 }

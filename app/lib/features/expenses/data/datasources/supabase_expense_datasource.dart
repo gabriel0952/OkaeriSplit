@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/expense_item_entity.dart';
 import 'package:app/features/expenses/domain/entities/group_category_entity.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -12,7 +13,7 @@ class SupabaseExpenseDataSource {
   Future<List<ExpenseEntity>> getExpenses(String groupId) async {
     final response = await _client
         .from('expenses')
-        .select('*, expense_splits(*)')
+        .select('*, expense_splits(*), expense_items(*)')
         .eq('group_id', groupId)
         .order('expense_date', ascending: false);
 
@@ -24,7 +25,7 @@ class SupabaseExpenseDataSource {
   Future<ExpenseEntity> getExpenseDetail(String expenseId) async {
     final response = await _client
         .from('expenses')
-        .select('*, expense_splits(*)')
+        .select('*, expense_splits(*), expense_items(*)')
         .eq('id', expenseId)
         .single();
 
@@ -41,6 +42,7 @@ class SupabaseExpenseDataSource {
     String? note,
     required DateTime expenseDate,
     required List<Map<String, dynamic>> splits,
+    required List<Map<String, dynamic>> items,
   }) async {
     final response = await _client.rpc(
       'create_expense',
@@ -54,6 +56,7 @@ class SupabaseExpenseDataSource {
         'p_note': note,
         'p_expense_date': expenseDate.toIso8601String().split('T').first,
         'p_splits': splits,
+        'p_items': items,
       },
     );
     return response as String;
@@ -68,6 +71,7 @@ class SupabaseExpenseDataSource {
     String? note,
     required DateTime expenseDate,
     List<Map<String, dynamic>>? splits,
+    List<Map<String, dynamic>>? items,
   }) async {
     await _client.rpc(
       'update_expense',
@@ -80,6 +84,7 @@ class SupabaseExpenseDataSource {
         'p_note': note,
         'p_expense_date': expenseDate.toIso8601String().split('T').first,
         'p_splits': splits ?? [],
+        'p_items': items ?? [],
       },
     );
   }
@@ -109,11 +114,7 @@ class SupabaseExpenseDataSource {
   }) async {
     final response = await _client
         .from('group_categories')
-        .insert({
-          'group_id': groupId,
-          'name': name,
-          'icon_name': iconName,
-        })
+        .insert({'group_id': groupId, 'name': name, 'icon_name': iconName})
         .select()
         .single();
 
@@ -145,14 +146,17 @@ class SupabaseExpenseDataSource {
       _ => 'image/jpeg',
     };
 
-    await _client.storage.from('receipts').uploadBinary(
-      storagePath,
-      bytes,
-      fileOptions: FileOptions(contentType: mimeType),
-    );
+    await _client.storage
+        .from('receipts')
+        .uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType),
+        );
 
-    final publicUrl =
-        _client.storage.from('receipts').getPublicUrl(storagePath);
+    final publicUrl = _client.storage
+        .from('receipts')
+        .getPublicUrl(storagePath);
     return publicUrl;
   }
 
@@ -173,13 +177,28 @@ class SupabaseExpenseDataSource {
   }) async {
     await _client
         .from('expenses')
-        .update({'attachment_urls': urls}).eq('id', expenseId);
+        .update({'attachment_urls': urls})
+        .eq('id', expenseId);
   }
 
   // --- Mapping helpers ---
 
   ExpenseEntity _mapExpense(Map<String, dynamic> data) {
     final splitsData = data['expense_splits'] as List? ?? [];
+    final itemsData = (data['expense_items'] as List? ?? [])
+      ..sort((a, b) {
+        final left =
+            DateTime.tryParse(
+              (a as Map<String, dynamic>)['created_at'] as String? ?? '',
+            ) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final right =
+            DateTime.tryParse(
+              (b as Map<String, dynamic>)['created_at'] as String? ?? '',
+            ) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return left.compareTo(right);
+      });
     final attachments = data['attachment_urls'] as List?;
     return ExpenseEntity(
       id: data['id'] as String,
@@ -194,8 +213,8 @@ class SupabaseExpenseDataSource {
       createdAt: DateTime.parse(data['created_at'] as String),
       updatedAt: DateTime.parse(data['updated_at'] as String),
       splits: splitsData.map(_mapSplit).toList(),
-      attachmentUrls:
-          attachments?.map((e) => e as String).toList() ?? const [],
+      items: itemsData.map(_mapItem).toList(),
+      attachmentUrls: attachments?.map((e) => e as String).toList() ?? const [],
     );
   }
 
@@ -210,6 +229,19 @@ class SupabaseExpenseDataSource {
         (e) => toSnakeCase(e.name) == map['split_type'],
         orElse: () => SplitType.equal,
       ),
+    );
+  }
+
+  ExpenseItemEntity _mapItem(dynamic data) {
+    final map = data as Map<String, dynamic>;
+    return ExpenseItemEntity(
+      id: map['id'] as String,
+      expenseId: map['expense_id'] as String,
+      name: map['name'] as String? ?? '',
+      amount: (map['amount'] as num).toDouble(),
+      sharedByUserIds: (map['shared_by_user_ids'] as List? ?? const [])
+          .map((e) => e as String)
+          .toList(),
     );
   }
 

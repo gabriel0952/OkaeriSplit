@@ -14,6 +14,7 @@ class PendingExpenseDto {
     this.note,
     required this.expenseDate,
     required this.splits,
+    required this.items,
     required this.pendingAt,
   });
 
@@ -27,21 +28,23 @@ class PendingExpenseDto {
   final String? note;
   final DateTime expenseDate;
   final List<Map<String, dynamic>> splits;
+  final List<Map<String, dynamic>> items;
   final DateTime pendingAt;
 
   Map<String, dynamic> toJson() => {
-        'local_id': localId,
-        'group_id': groupId,
-        'paid_by': paidBy,
-        'amount': amount,
-        'currency': currency,
-        'category': category,
-        'description': description,
-        'note': note,
-        'expense_date': expenseDate.toIso8601String(),
-        'splits': splits,
-        'pending_at': pendingAt.toIso8601String(),
-      };
+    'local_id': localId,
+    'group_id': groupId,
+    'paid_by': paidBy,
+    'amount': amount,
+    'currency': currency,
+    'category': category,
+    'description': description,
+    'note': note,
+    'expense_date': expenseDate.toIso8601String(),
+    'splits': splits,
+    'items': items,
+    'pending_at': pendingAt.toIso8601String(),
+  };
 
   factory PendingExpenseDto.fromJson(Map<String, dynamic> j) =>
       PendingExpenseDto(
@@ -55,6 +58,7 @@ class PendingExpenseDto {
         note: j['note'] as String?,
         expenseDate: DateTime.parse(j['expense_date'] as String),
         splits: (j['splits'] as List).cast<Map<String, dynamic>>(),
+        items: (j['items'] as List? ?? const []).cast<Map<String, dynamic>>(),
         pendingAt: DateTime.parse(j['pending_at'] as String),
       );
 }
@@ -68,9 +72,11 @@ class PendingExpenseRepository {
 
   List<PendingExpenseDto> getAll() {
     return _box.values
-        .map((v) => PendingExpenseDto.fromJson(
-              jsonDecode(v as String) as Map<String, dynamic>,
-            ))
+        .map(
+          (v) => PendingExpenseDto.fromJson(
+            jsonDecode(v as String) as Map<String, dynamic>,
+          ),
+        )
         .toList();
   }
 

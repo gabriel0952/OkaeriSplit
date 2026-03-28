@@ -2,12 +2,16 @@ import 'dart:convert';
 
 import 'package:app/core/constants/app_constants.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/expense_item_entity.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class HiveExpenseDataSource {
   Box get _box => Hive.box('expenses_cache');
 
-  Future<void> saveExpenses(String groupId, List<ExpenseEntity> expenses) async {
+  Future<void> saveExpenses(
+    String groupId,
+    List<ExpenseEntity> expenses,
+  ) async {
     final json = jsonEncode(expenses.map(_expenseToJson).toList());
     await _box.put(groupId, json);
   }
@@ -24,47 +28,50 @@ class HiveExpenseDataSource {
   // --- Serialization helpers ---
 
   Map<String, dynamic> _expenseToJson(ExpenseEntity e) => {
-        'id': e.id,
-        'group_id': e.groupId,
-        'paid_by': e.paidBy,
-        'amount': e.amount,
-        'currency': e.currency,
-        'category': e.category,
-        'description': e.description,
-        'note': e.note,
-        'expense_date': e.expenseDate.toIso8601String(),
-        'created_at': e.createdAt.toIso8601String(),
-        'updated_at': e.updatedAt.toIso8601String(),
-        'splits': e.splits.map(_splitToJson).toList(),
-        'attachment_urls': e.attachmentUrls,
-      };
+    'id': e.id,
+    'group_id': e.groupId,
+    'paid_by': e.paidBy,
+    'amount': e.amount,
+    'currency': e.currency,
+    'category': e.category,
+    'description': e.description,
+    'note': e.note,
+    'expense_date': e.expenseDate.toIso8601String(),
+    'created_at': e.createdAt.toIso8601String(),
+    'updated_at': e.updatedAt.toIso8601String(),
+    'splits': e.splits.map(_splitToJson).toList(),
+    'items': e.items.map(_itemToJson).toList(),
+    'attachment_urls': e.attachmentUrls,
+  };
 
   ExpenseEntity _expenseFromJson(Map<String, dynamic> j) => ExpenseEntity(
-        id: j['id'] as String,
-        groupId: j['group_id'] as String,
-        paidBy: j['paid_by'] as String,
-        amount: (j['amount'] as num).toDouble(),
-        currency: j['currency'] as String? ?? 'TWD',
-        category: j['category'] as String? ?? 'food',
-        description: j['description'] as String? ?? '',
-        note: j['note'] as String?,
-        expenseDate: DateTime.parse(j['expense_date'] as String),
-        createdAt: DateTime.parse(j['created_at'] as String),
-        updatedAt: DateTime.parse(j['updated_at'] as String),
-        splits: (j['splits'] as List? ?? [])
-            .map((s) => _splitFromJson(s as Map<String, dynamic>))
-            .toList(),
-        attachmentUrls:
-            (j['attachment_urls'] as List? ?? []).cast<String>(),
-      );
+    id: j['id'] as String,
+    groupId: j['group_id'] as String,
+    paidBy: j['paid_by'] as String,
+    amount: (j['amount'] as num).toDouble(),
+    currency: j['currency'] as String? ?? 'TWD',
+    category: j['category'] as String? ?? 'food',
+    description: j['description'] as String? ?? '',
+    note: j['note'] as String?,
+    expenseDate: DateTime.parse(j['expense_date'] as String),
+    createdAt: DateTime.parse(j['created_at'] as String),
+    updatedAt: DateTime.parse(j['updated_at'] as String),
+    splits: (j['splits'] as List? ?? [])
+        .map((s) => _splitFromJson(s as Map<String, dynamic>))
+        .toList(),
+    items: (j['items'] as List? ?? [])
+        .map((item) => _itemFromJson(item as Map<String, dynamic>))
+        .toList(),
+    attachmentUrls: (j['attachment_urls'] as List? ?? []).cast<String>(),
+  );
 
   Map<String, dynamic> _splitToJson(ExpenseSplitEntity s) => {
-        'id': s.id,
-        'expense_id': s.expenseId,
-        'user_id': s.userId,
-        'amount': s.amount,
-        'split_type': s.splitType.name,
-      };
+    'id': s.id,
+    'expense_id': s.expenseId,
+    'user_id': s.userId,
+    'amount': s.amount,
+    'split_type': s.splitType.name,
+  };
 
   ExpenseSplitEntity _splitFromJson(Map<String, dynamic> j) =>
       ExpenseSplitEntity(
@@ -77,4 +84,21 @@ class HiveExpenseDataSource {
           orElse: () => SplitType.equal,
         ),
       );
+
+  Map<String, dynamic> _itemToJson(ExpenseItemEntity item) => {
+    'id': item.id,
+    'expense_id': item.expenseId,
+    'name': item.name,
+    'amount': item.amount,
+    'shared_by_user_ids': item.sharedByUserIds,
+  };
+
+  ExpenseItemEntity _itemFromJson(Map<String, dynamic> j) => ExpenseItemEntity(
+    id: j['id'] as String,
+    expenseId: j['expense_id'] as String,
+    name: j['name'] as String,
+    amount: (j['amount'] as num).toDouble(),
+    sharedByUserIds: (j['shared_by_user_ids'] as List? ?? const [])
+        .cast<String>(),
+  );
 }

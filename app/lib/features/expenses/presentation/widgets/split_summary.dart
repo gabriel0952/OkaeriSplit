@@ -24,6 +24,7 @@ class SplitSummary extends StatelessWidget {
             .where((m) => m.userId == split.userId)
             .firstOrNull;
         final name = member?.displayName ?? split.userId;
+        final badgeLabel = _badgeLabel(split.splitType);
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -38,7 +39,7 @@ class SplitSummary extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(child: Text(name)),
-              if (split.splitType != SplitType.equal)
+              if (badgeLabel != null)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Container(
@@ -47,20 +48,16 @@ class SplitSummary extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .secondaryContainer,
+                      color: Theme.of(context).colorScheme.secondaryContainer,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      split.splitType == SplitType.customRatio
-                          ? '自訂比例'
-                          : '指定金額',
+                      badgeLabel,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer,
-                          ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSecondaryContainer,
+                      ),
                     ),
                   ),
                 ),
@@ -75,5 +72,14 @@ class SplitSummary extends StatelessWidget {
         );
       }).toList(),
     );
+  }
+
+  String? _badgeLabel(SplitType type) {
+    return switch (type) {
+      SplitType.equal => null,
+      SplitType.customRatio => '自訂比例',
+      SplitType.fixedAmount => '指定金額',
+      SplitType.itemized => '項目拆分',
+    };
   }
 }

@@ -20,5 +20,11 @@ class AuthFailure extends Failure {
   const AuthFailure([super.message = 'Authentication error occurred']);
 }
 
+class UnsupportedFeatureFailure extends Failure {
+  const UnsupportedFeatureFailure([
+    super.message = 'This feature is not supported on this device',
+  ]);
+}
+
 /// Convenience typedef for `Either<Failure, T>`
 typedef AppResult<T> = Either<Failure, T>;

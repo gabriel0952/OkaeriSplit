@@ -31,6 +31,7 @@ class SyncService {
           note: item.note,
           expenseDate: item.expenseDate,
           splits: item.splits,
+          items: item.items,
         );
         await _pendingRepo.remove(item.localId);
         affectedGroups.add(item.groupId);

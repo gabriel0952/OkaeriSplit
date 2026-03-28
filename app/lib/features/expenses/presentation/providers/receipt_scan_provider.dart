@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app/core/errors/failures.dart';
 import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.dart';
 import 'package:app/features/expenses/data/repositories/receipt_scan_repository_impl.dart';
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
@@ -69,10 +70,18 @@ class ReceiptScanNotifier extends StateNotifier<ReceiptScanState> {
     final result = await _scanReceipt(imageFile: imageFile, language: language);
 
     state = result.fold(
-      (failure) => ReceiptScanState(
-        status: ScanStatus.error,
-        errorMessage: failure.message,
-      ),
+      (failure) {
+        if (failure is UnsupportedFeatureFailure) {
+          return ReceiptScanState(
+            status: ScanStatus.notSupported,
+            errorMessage: failure.message,
+          );
+        }
+        return ReceiptScanState(
+          status: ScanStatus.error,
+          errorMessage: failure.message,
+        );
+      },
       (scanResult) {
         if (scanResult.items.isEmpty && scanResult.total <= 0) {
           return const ReceiptScanState(

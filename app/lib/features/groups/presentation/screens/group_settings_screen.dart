@@ -45,8 +45,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
               loading: () => const AppLoadingWidget(),
               error: (error, _) => AppErrorWidget(
                 message: error.toString(),
-                onRetry: () =>
-                    ref.invalidate(groupDetailProvider(groupId)),
+                onRetry: () => ref.invalidate(groupDetailProvider(groupId)),
               ),
               data: (group) {
                 final isOwner = currentUser?.id == group.createdBy;
@@ -57,10 +56,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     // ── 群組名稱 Section ────────────────────────────────
                     Text(
                       '群組名稱',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Card(
@@ -78,14 +76,44 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     ),
                     const SizedBox(height: 24),
 
+                    // ── 功能入口 Section ───────────────────────────────
+                    Text(
+                      '功能',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(
+                              Icons.account_balance_wallet_outlined,
+                            ),
+                            title: const Text('帳務總覽'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () =>
+                                context.push('/groups/$groupId/balances'),
+                          ),
+                          const Divider(height: 1, indent: 56),
+                          ListTile(
+                            leading: const Icon(Icons.pie_chart_outline),
+                            title: const Text('消費統計'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => context.push('/groups/$groupId/stats'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
                     // ── 成員 Section ───────────────────────────────────
                     Row(
                       children: [
                         Text(
                           '成員',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const Spacer(),
@@ -96,9 +124,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                                 context: context,
                                 isScrollControlled: true,
                                 useSafeArea: true,
-                                builder: (_) => AddGuestMemberDialog(
-                                  groupId: groupId,
-                                ),
+                                builder: (_) =>
+                                    AddGuestMemberDialog(groupId: groupId),
                               );
                             },
                             icon: const Icon(Icons.person_outline, size: 18),
@@ -106,7 +133,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                           ),
                           TextButton.icon(
                             onPressed: () {
-                              final memberIds = membersAsync.valueOrNull
+                              final memberIds =
+                                  membersAsync.valueOrNull
                                       ?.map((m) => m.userId)
                                       .toSet() ??
                                   {};
@@ -138,9 +166,12 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: members.map((member) {
-                            final resolvedName =
-                                resolveDisplayName(members, member);
-                            final canRemove = isOwner &&
+                            final resolvedName = resolveDisplayName(
+                              members,
+                              member,
+                            );
+                            final canRemove =
+                                isOwner &&
                                 !group.isArchived &&
                                 member.userId != currentUser?.id &&
                                 member.role != 'owner';
@@ -163,56 +194,12 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // ── 功能入口 Section ───────────────────────────────
-                    Text(
-                      '功能',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(
-                                Icons.account_balance_wallet_outlined),
-                            title: const Text('帳務總覽'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () =>
-                                context.push('/groups/$groupId/balances'),
-                          ),
-                          const Divider(height: 1, indent: 56),
-                          ListTile(
-                            leading: const Icon(Icons.pie_chart_outline),
-                            title: const Text('消費統計'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () =>
-                                context.push('/groups/$groupId/stats'),
-                          ),
-                          const Divider(height: 1, indent: 56),
-                          ListTile(
-                            leading:
-                                const Icon(Icons.history_outlined),
-                            title: const Text('結算紀錄'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () =>
-                                context.push('/groups/$groupId/settlements'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
                     // ── 幣別匯率 Section ────────────────────────────────
                     Row(
                       children: [
                         Text(
                           '幣別匯率',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const Spacer(),
@@ -228,7 +215,11 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildExchangeRatesSection(context, group.currency, isGuest),
+                    _buildExchangeRatesSection(
+                      context,
+                      group.currency,
+                      isGuest,
+                    ),
                     const SizedBox(height: 24),
 
                     // ── Guest 操作區 ────────────────────────────────────
@@ -258,23 +249,27 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                         const SizedBox(height: 8),
                       ],
                       if (isOwner && !group.isArchived) ...[
-                        Builder(builder: (context) {
-                          final balancesAsync =
-                              ref.watch(balancesProvider(groupId));
-                          final unsettled =
-                              balancesAsync.valueOrNull?.fold<double>(
-                                    0,
-                                    (sum, b) => sum +
-                                        (b.netBalance > 0 ? b.netBalance : 0),
-                                  ) ??
-                                  0;
-                          return OutlinedButton.icon(
-                            onPressed: () =>
-                                _handleArchiveGroup(context, unsettled),
-                            icon: const Icon(Icons.archive_outlined),
-                            label: const Text('封存群組'),
-                          );
-                        }),
+                        Builder(
+                          builder: (context) {
+                            final balancesAsync = ref.watch(
+                              balancesProvider(groupId),
+                            );
+                            final unsettled =
+                                balancesAsync.valueOrNull?.fold<double>(
+                                  0,
+                                  (sum, b) =>
+                                      sum +
+                                      (b.netBalance > 0 ? b.netBalance : 0),
+                                ) ??
+                                0;
+                            return OutlinedButton.icon(
+                              onPressed: () =>
+                                  _handleArchiveGroup(context, unsettled),
+                              icon: const Icon(Icons.archive_outlined),
+                              label: const Text('封存群組'),
+                            );
+                          },
+                        ),
                         const SizedBox(height: 8),
                       ],
                       if (!group.isArchived)
@@ -282,8 +277,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                           OutlinedButton.icon(
                             onPressed: () => _handleDeleteGroup(context),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor:
-                                  Theme.of(context).colorScheme.error,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
                               side: BorderSide(
                                 color: Theme.of(context).colorScheme.error,
                               ),
@@ -295,8 +291,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                           OutlinedButton.icon(
                             onPressed: () => _handleLeaveGroup(context),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor:
-                                  Theme.of(context).colorScheme.error,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
                               side: BorderSide(
                                 color: Theme.of(context).colorScheme.error,
                               ),
@@ -315,7 +312,10 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     );
   }
 
-  Future<void> _showEditNameDialog(BuildContext context, String currentName) async {
+  Future<void> _showEditNameDialog(
+    BuildContext context,
+    String currentName,
+  ) async {
     final newName = await showDialog<String>(
       context: context,
       builder: (_) => _EditNameDialog(initialName: currentName),
@@ -329,8 +329,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
     if (!context.mounted) return;
     result.fold(
-      (failure) => ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failure.message))),
+      (failure) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failure.message))),
       (_) {
         ref.invalidate(groupDetailProvider(groupId));
         ref.invalidate(groupsProvider);
@@ -360,8 +361,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
               child: Text(
                 '尚未設定任何匯率，記帳只能使用群組幣別 $groupCurrency',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           );
@@ -376,10 +377,10 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                 onTap: isGuest
                     ? null
                     : () => _showEditExchangeRateSheet(
-                          context,
-                          groupCurrency,
-                          rate,
-                        ),
+                        context,
+                        groupCurrency,
+                        rate,
+                      ),
               );
               if (isGuest) return tile;
               return Dismissible(
@@ -398,10 +399,8 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
                     ),
                   ),
                 ),
-                confirmDismiss: (_) => _deleteExchangeRate(
-                  context,
-                  rate.currency,
-                ),
+                confirmDismiss: (_) =>
+                    _deleteExchangeRate(context, rate.currency),
                 child: tile,
               );
             }).toList(),
@@ -420,8 +419,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
     if (!context.mounted) return false;
     return result.fold(
       (failure) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
         return false;
       },
       (_) {
@@ -432,23 +432,33 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   }
 
   static const _availableCurrencies = [
-    'USD', 'JPY', 'EUR', 'GBP', 'KRW', 'CNY', 'HKD', 'SGD', 'THB', 'AUD',
+    'USD',
+    'JPY',
+    'EUR',
+    'GBP',
+    'KRW',
+    'CNY',
+    'HKD',
+    'SGD',
+    'THB',
+    'AUD',
   ];
 
   Future<void> _showAddExchangeRateSheet(
     BuildContext context,
     String groupCurrency,
   ) async {
-    final rates = ref.read(groupExchangeRatesProvider(groupId)).valueOrNull ?? [];
+    final rates =
+        ref.read(groupExchangeRatesProvider(groupId)).valueOrNull ?? [];
     final existingCurrencies = rates.map((r) => r.currency).toSet();
     final available = _availableCurrencies
         .where((c) => c != groupCurrency && !existingCurrencies.contains(c))
         .toList();
 
     if (available.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('所有支援的幣別均已設定匯率')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('所有支援的幣別均已設定匯率')));
       return;
     }
 
@@ -536,29 +546,26 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
     if (!context.mounted) return;
 
-    result.fold(
-      (failure) {
-        showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            icon: Icon(
-              Icons.warning_amber_rounded,
-              color: Theme.of(context).colorScheme.error,
-              size: 32,
-            ),
-            title: const Text('無法移除成員'),
-            content: Text(_friendlyRemoveError(failure.message)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('知道了'),
-              ),
-            ],
+    result.fold((failure) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            color: Theme.of(context).colorScheme.error,
+            size: 32,
           ),
-        );
-      },
-      (_) => ref.invalidate(groupMembersProvider(groupId)),
-    );
+          title: const Text('無法移除成員'),
+          content: Text(_friendlyRemoveError(failure.message)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    }, (_) => ref.invalidate(groupMembersProvider(groupId)));
   }
 
   String _friendlyRemoveError(String raw) {
@@ -604,8 +611,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('刪除群組'),
-        content: const Text(
-            '確定要刪除這個群組嗎？所有消費紀錄、帳務與成員資料都將被永久刪除，此操作無法復原。'),
+        content: const Text('確定要刪除這個群組嗎？所有消費紀錄、帳務與成員資料都將被永久刪除，此操作無法復原。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -631,8 +637,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (_) {
         ref.invalidate(groupsProvider);
@@ -672,8 +679,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (_) {
         ref.invalidate(groupsProvider);
@@ -683,7 +691,9 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
   }
 
   Future<void> _handleArchiveGroup(
-      BuildContext context, double unsettled) async {
+    BuildContext context,
+    double unsettled,
+  ) async {
     if (unsettled > 0) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -713,8 +723,7 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('封存群組'),
-          content: const Text(
-              '封存後群組將變為唯讀，所有成員無法繼續記帳。訪客帳號將被刪除。\n\n可隨時重新開啟群組。'),
+          content: const Text('封存後群組將變為唯讀，所有成員無法繼續記帳。訪客帳號將被刪除。\n\n可隨時重新開啟群組。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -739,14 +748,14 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       if (!context.mounted) return;
       ref.invalidate(groupDetailProvider(groupId));
       ref.invalidate(groupsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('群組已封存')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('群組已封存')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('封存失敗：$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('封存失敗：$e')));
     }
   }
 
@@ -776,14 +785,14 @@ class _GroupSettingsScreenState extends ConsumerState<GroupSettingsScreen> {
       if (!context.mounted) return;
       ref.invalidate(groupDetailProvider(groupId));
       ref.invalidate(groupsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('群組已重新開啟')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('群組已重新開啟')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失敗：$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失敗：$e')));
     }
   }
 }
@@ -841,8 +850,7 @@ class _ExchangeRateFormSheetState
     setState(() => _isSaving = true);
 
     final setRate = ref.read(setExchangeRateUseCaseProvider);
-    final result =
-        await setRate(widget.groupId, _selectedCurrency, rateValue);
+    final result = await setRate(widget.groupId, _selectedCurrency, rateValue);
 
     if (!mounted) return;
     result.fold(
@@ -867,10 +875,7 @@ class _ExchangeRateFormSheetState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            widget.title,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (widget.availableCurrencies.length > 1) ...[
             DropdownButtonFormField<String>(
@@ -897,13 +902,11 @@ class _ExchangeRateFormSheetState
           TextField(
             controller: _rateController,
             autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               labelText: '匯率',
               hintText: '例：32.5',
-              helperText:
-                  '1 $_selectedCurrency = ? ${widget.groupCurrency}',
+              helperText: '1 $_selectedCurrency = ? ${widget.groupCurrency}',
               errorText: _rateError,
               border: const OutlineInputBorder(),
             ),
@@ -968,10 +971,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
       content: TextField(
         controller: _controller,
         autofocus: true,
-        decoration: InputDecoration(
-          hintText: '群組名稱',
-          errorText: _error,
-        ),
+        decoration: InputDecoration(hintText: '群組名稱', errorText: _error),
         onChanged: (_) {
           if (_error != null) setState(() => _error = null);
         },
@@ -982,10 +982,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        TextButton(
-          onPressed: _submit,
-          child: const Text('確認'),
-        ),
+        TextButton(onPressed: _submit, child: const Text('確認')),
       ],
     );
   }

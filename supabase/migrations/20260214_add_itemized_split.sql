@@ -1,3 +1,11 @@
+-- Legacy schema-only migration for the first itemized split rollout.
+-- This migration only adds the table / constraint layer.
+-- It does NOT update create_expense / update_expense to persist expense_items.
+-- Keep it for environments that already applied it historically.
+-- The current standalone source of truth is:
+--   20260328_itemized_expense_persistence.sql
+-- which is safe to run even if this legacy migration was never applied.
+
 -- Support itemized split type in expense_splits
 -- The 'itemized' split_type stores the aggregated per-user amounts
 -- derived from individual items. The items themselves are stored

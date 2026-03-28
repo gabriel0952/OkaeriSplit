@@ -6,6 +6,7 @@ import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.d
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
 import 'package:app/features/expenses/domain/repositories/receipt_scan_repository.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:flutter/services.dart';
 
 class ReceiptScanRepositoryImpl implements ReceiptScanRepository {
   const ReceiptScanRepositoryImpl(this._datasource);
@@ -22,6 +23,10 @@ class ReceiptScanRepositoryImpl implements ReceiptScanRepository {
         language: language,
       );
       return Right(result);
+    } on MissingPluginException {
+      return const Left(UnsupportedFeatureFailure('此裝置目前不支援收據掃描'));
+    } on UnsupportedError catch (e) {
+      return Left(UnsupportedFeatureFailure(e.message ?? '此裝置不支援收據掃描'));
     } on StateError catch (e) {
       return Left(ServerFailure('模型未就緒：${e.message}'));
     } on TimeoutException {

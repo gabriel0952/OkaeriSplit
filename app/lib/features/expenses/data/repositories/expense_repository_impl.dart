@@ -6,6 +6,7 @@ import 'package:app/features/expenses/data/datasources/hive_expense_datasource.d
 import 'package:app/features/expenses/data/datasources/supabase_expense_datasource.dart';
 import 'package:app/features/expenses/data/pending_expense_repository.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
+import 'package:app/features/expenses/domain/entities/expense_item_entity.dart';
 import 'package:app/features/expenses/domain/repositories/expense_repository.dart';
 import 'package:fpdart/fpdart.dart';
 
@@ -48,33 +49,47 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   static ExpenseEntity _pendingToEntity(PendingExpenseDto p) => ExpenseEntity(
-        id: p.localId,
-        groupId: p.groupId,
-        paidBy: p.paidBy,
-        amount: p.amount,
-        currency: p.currency,
-        category: p.category,
-        description: p.description,
-        note: p.note,
-        expenseDate: p.expenseDate,
-        createdAt: p.pendingAt,
-        updatedAt: p.pendingAt,
-        splits: p.splits
-            .map(
-              (s) => ExpenseSplitEntity(
-                id: '${p.localId}_${s['user_id']}',
-                expenseId: p.localId,
-                userId: s['user_id'] as String,
-                amount: (s['amount'] as num).toDouble(),
-                splitType: SplitType.values.firstWhere(
-                  (e) => e.name == (s['split_type'] as String),
-                  orElse: () => SplitType.equal,
-                ),
-              ),
-            )
-            .toList(),
-        isPending: true,
-      );
+    id: p.localId,
+    groupId: p.groupId,
+    paidBy: p.paidBy,
+    amount: p.amount,
+    currency: p.currency,
+    category: p.category,
+    description: p.description,
+    note: p.note,
+    expenseDate: p.expenseDate,
+    createdAt: p.pendingAt,
+    updatedAt: p.pendingAt,
+    splits: p.splits
+        .map(
+          (s) => ExpenseSplitEntity(
+            id: '${p.localId}_${s['user_id']}',
+            expenseId: p.localId,
+            userId: s['user_id'] as String,
+            amount: (s['amount'] as num).toDouble(),
+            splitType: SplitType.values.firstWhere(
+              (e) =>
+                  SupabaseExpenseDataSource.toSnakeCase(e.name) ==
+                  (s['split_type'] as String),
+              orElse: () => SplitType.equal,
+            ),
+          ),
+        )
+        .toList(),
+    items: p.items
+        .map(
+          (item) => ExpenseItemEntity(
+            id: item['id'] as String? ?? '${p.localId}_${item['name']}',
+            expenseId: p.localId,
+            name: item['name'] as String? ?? '',
+            amount: (item['amount'] as num).toDouble(),
+            sharedByUserIds: (item['shared_by_user_ids'] as List? ?? const [])
+                .cast<String>(),
+          ),
+        )
+        .toList(),
+    isPending: true,
+  );
 
   @override
   Future<AppResult<ExpenseEntity>> getExpenseDetail(String expenseId) async {
@@ -97,6 +112,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     String? note,
     required DateTime expenseDate,
     required List<Map<String, dynamic>> splits,
+    required List<Map<String, dynamic>> items,
   }) async {
     if (!_isOnline) {
       final dto = PendingExpenseDto(
@@ -110,6 +126,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         note: note,
         expenseDate: expenseDate,
         splits: splits,
+        items: items,
         pendingAt: DateTime.now(),
       );
       await _pendingRepo.add(dto);
@@ -126,6 +143,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         note: note,
         expenseDate: expenseDate,
         splits: splits,
+        items: items,
       );
       return Right(expenseId);
     } catch (e) {
@@ -143,6 +161,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     String? note,
     required DateTime expenseDate,
     List<Map<String, dynamic>>? splits,
+    List<Map<String, dynamic>>? items,
   }) async {
     try {
       await _dataSource.updateExpense(
@@ -154,6 +173,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         note: note,
         expenseDate: expenseDate,
         splits: splits,
+        items: items,
       );
       return const Right(null);
     } catch (e) {

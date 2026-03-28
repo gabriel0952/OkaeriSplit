@@ -48,173 +48,275 @@ class ExpenseDetailScreen extends ConsumerWidget {
       body: Column(
         children: [
           const OfflineBanner(),
-          Expanded(child: expenseAsync.when(
-        loading: () => const AppLoadingWidget(),
-        error: (error, _) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(expenseDetailLiveProvider(liveKey)),
-        ),
-        data: (expense) {
-          final members = membersAsync.valueOrNull ?? [];
-          final memberMap = {for (final m in members) m.userId: m.displayName};
-          final isOwner = currentUser?.id == expense.paidBy;
-          final isMember = members.any((m) => m.userId == currentUser?.id);
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Amount
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        '\$${expense.amount.toStringAsFixed(2)}',
-                        style: Theme.of(context).textTheme.headlineLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        expense.currency,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
+          Expanded(
+            child: expenseAsync.when(
+              loading: () => const AppLoadingWidget(),
+              error: (error, _) => AppErrorWidget(
+                message: error.toString(),
+                onRetry: () =>
+                    ref.invalidate(expenseDetailLiveProvider(liveKey)),
               ),
-              const SizedBox(height: 16),
+              data: (expense) {
+                final members = membersAsync.valueOrNull ?? [];
+                final memberMap = {
+                  for (final m in members) m.userId: m.displayName,
+                };
+                final isOwner = currentUser?.id == expense.paidBy;
+                final isMember = members.any(
+                  (m) => m.userId == currentUser?.id,
+                );
 
-              // Info
-              Card(
-                child: Padding(
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _infoRow(context, '描述', expense.description),
-                      if (expense.note != null && expense.note!.isNotEmpty) ...[
-                        const Divider(),
-                        _infoRow(context, '備註', expense.note!),
-                      ],
-                      const Divider(),
-                      _infoRow(
-                        context,
-                        '分類',
-                        categoryLabel(expense.category, customCategories),
-                      ),
-                      const Divider(),
-                      _infoRow(
-                        context,
-                        '付款人',
-                        memberMap[expense.paidBy] ?? expense.paidBy,
-                      ),
-                      const Divider(),
-                      _infoRow(
-                        context,
-                        '日期',
-                        DateFormat('yyyy/MM/dd').format(expense.expenseDate),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Attachments
-              if (expense.attachmentUrls.isNotEmpty) ...[
-                Text(
-                  '收據/照片',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 100,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: expense.attachmentUrls.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final url = expense.attachmentUrls[index];
-                      return GestureDetector(
-                        onTap: () => _showFullImage(context, url),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            url,
-                            width: 100,
-                            height: 100,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.broken_image_outlined),
+                  children: [
+                    // Amount
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Text(
+                              '\$${expense.amount.toStringAsFixed(2)}',
+                              style: Theme.of(context).textTheme.headlineLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              expense.currency,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Info
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _infoRow(context, '描述', expense.description),
+                            if (expense.note != null &&
+                                expense.note!.isNotEmpty) ...[
+                              const Divider(),
+                              _infoRow(context, '備註', expense.note!),
+                            ],
+                            const Divider(),
+                            _infoRow(
+                              context,
+                              '分類',
+                              categoryLabel(expense.category, customCategories),
+                            ),
+                            const Divider(),
+                            _infoRow(
+                              context,
+                              '付款人',
+                              memberMap[expense.paidBy] ?? expense.paidBy,
+                            ),
+                            const Divider(),
+                            _infoRow(
+                              context,
+                              '日期',
+                              DateFormat(
+                                'yyyy/MM/dd',
+                              ).format(expense.expenseDate),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Attachments
+                    if (expense.attachmentUrls.isNotEmpty) ...[
+                      Text(
+                        '收據/照片',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 100,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: expense.attachmentUrls.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final url = expense.attachmentUrls[index];
+                            return GestureDetector(
+                              onTap: () => _showFullImage(context, url),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  url,
+                                  width: 100,
+                                  height: 100,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => Container(
+                                    width: 100,
+                                    height: 100,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.broken_image_outlined,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Split details
+                    Text(
+                      '分帳明細',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SplitSummary(
+                          splits: expense.splits,
+                          members: members,
+                          currency: expense.currency,
+                        ),
+                      ),
+                    ),
+                    if (expense.items.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        '項目拆分內容',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: expense.items.asMap().entries.map((
+                              entry,
+                            ) {
+                              final item = entry.value;
+                              final assigneeNames = item.sharedByUserIds
+                                  .map((userId) => memberMap[userId] ?? userId)
+                                  .toList();
+
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: entry.key == expense.items.length - 1
+                                      ? 0
+                                      : 12,
+                                ),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerLowest,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              item.name,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '${expense.currency} ${item.amount.toStringAsFixed(2)}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleSmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '分攤者：${assigneeNames.join('、')}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                              height: 1.4,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+                      ),
+                    ],
+                    const SizedBox(height: 24),
 
-              // Split details
-              Text(
-                '分帳明細',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SplitSummary(
-                    splits: expense.splits,
-                    members: members,
-                    currency: expense.currency,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
+                    // Edit/Delete buttons hidden for guests
+                    if (isMember && !isGuest) ...[
+                      FilledButton.icon(
+                        onPressed: () => context.push(
+                          '/groups/$groupId/expenses/$expenseId/edit',
+                        ),
+                        icon: const Icon(Icons.edit),
+                        label: const Text('編輯'),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
 
-              // Edit/Delete buttons hidden for guests
-              if (isMember && !isGuest) ...[
-                FilledButton.icon(
-                  onPressed: () =>
-                      context.push('/groups/$groupId/expenses/$expenseId/edit'),
-                  icon: const Icon(Icons.edit),
-                  label: const Text('編輯'),
-                ),
-                const SizedBox(height: 8),
-              ],
-
-              // Delete button: only paidBy, not guests
-              if (isOwner && !isGuest)
-                OutlinedButton.icon(
-                  onPressed: () => _handleDelete(context, ref),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                  icon: const Icon(Icons.delete),
-                  label: const Text('刪除'),
-                ),
-            ],
-          );
-        },
-      )),
+                    // Delete button: only paidBy, not guests
+                    if (isOwner && !isGuest)
+                      OutlinedButton.icon(
+                        onPressed: () => _handleDelete(context, ref),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        icon: const Icon(Icons.delete),
+                        label: const Text('刪除'),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -238,9 +340,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.close, color: Colors.white, size: 28),
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black54,
-              ),
+              style: IconButton.styleFrom(backgroundColor: Colors.black54),
             ),
           ],
         ),

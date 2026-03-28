@@ -15,6 +15,7 @@ class CreateExpense {
     String? note,
     required DateTime expenseDate,
     required List<Map<String, dynamic>> splits,
+    required List<Map<String, dynamic>> items,
   }) {
     return _repository.createExpense(
       groupId: groupId,
@@ -26,6 +27,7 @@ class CreateExpense {
       note: note,
       expenseDate: expenseDate,
       splits: splits,
+      items: items,
     );
   }
 }

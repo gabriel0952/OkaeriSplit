@@ -254,7 +254,7 @@ class _ReceiptScanResultScreenState
 
   Widget _buildBody(ReceiptScanState scanState, ColorScheme colorScheme) {
     return switch (scanState.status) {
-      ScanStatus.notSupported => _buildNotSupported(colorScheme),
+      ScanStatus.notSupported => _buildNotSupported(scanState, colorScheme),
       ScanStatus.idle || ScanStatus.scanning => _buildLoading(colorScheme),
       ScanStatus.error => _buildError(scanState, colorScheme),
       ScanStatus.success => _buildResult(colorScheme),
@@ -263,7 +263,10 @@ class _ReceiptScanResultScreenState
 
   // ── State screens ──────────────────────────────────────────────────────────
 
-  Widget _buildNotSupported(ColorScheme colorScheme) {
+  Widget _buildNotSupported(
+    ReceiptScanState scanState,
+    ColorScheme colorScheme,
+  ) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -277,7 +280,7 @@ class _ReceiptScanResultScreenState
             ),
             const SizedBox(height: 20),
             Text(
-              '此裝置不支援 AI 辨識功能',
+              scanState.errorMessage ?? '此裝置目前不支援收據掃描',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -286,7 +289,7 @@ class _ReceiptScanResultScreenState
             ),
             const SizedBox(height: 12),
             Text(
-              '收據掃描需要 iOS 16+ (Apple Vision)\n或支援 ML Kit 的 Android 裝置。',
+              '請在支援 Apple Vision 或 ML Kit OCR 的裝置上再試一次。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -313,7 +316,7 @@ class _ReceiptScanResultScreenState
         const CircularProgressIndicator(),
         const SizedBox(height: 16),
         Text(
-          'AI 正在分析收據...',
+          '正在分析收據...',
           style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 6),

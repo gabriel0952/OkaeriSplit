@@ -142,7 +142,10 @@ class ReceiptScanDatasource {
     if (Platform.isIOS) {
       return _collectVisionCandidates(imageFile, language: language);
     }
-    return _collectMlKitCandidates(imageFile, language: language);
+    if (Platform.isAndroid) {
+      return _collectMlKitCandidates(imageFile, language: language);
+    }
+    throw UnsupportedError('目前僅支援 iOS 與 Android 裝置進行收據掃描');
   }
 
   void _logScanResult(ScanResultEntity result) {

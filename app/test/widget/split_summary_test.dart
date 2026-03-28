@@ -34,11 +34,7 @@ void main() {
   Widget buildWidget(List<ExpenseSplitEntity> splits) {
     return MaterialApp(
       home: Scaffold(
-        body: SplitSummary(
-          splits: splits,
-          members: members,
-          currency: 'TWD',
-        ),
+        body: SplitSummary(splits: splits, members: members, currency: 'TWD'),
       ),
     );
   }
@@ -130,6 +126,22 @@ void main() {
       await tester.pumpWidget(buildWidget(splits));
 
       expect(find.text('指定金額'), findsOneWidget);
+    });
+
+    testWidgets('shows badge for itemized splits', (tester) async {
+      final splits = [
+        const ExpenseSplitEntity(
+          id: 's1',
+          expenseId: 'e1',
+          userId: 'u1',
+          amount: 80,
+          splitType: SplitType.itemized,
+        ),
+      ];
+
+      await tester.pumpWidget(buildWidget(splits));
+
+      expect(find.text('項目拆分'), findsOneWidget);
     });
 
     testWidgets('does not show badge for equal splits', (tester) async {
