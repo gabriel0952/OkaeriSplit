@@ -1,92 +1,89 @@
 # OkaeriSplit（おかえり Split）
 
-簡潔直覺的多人分帳 APP，讓記帳分帳像回家一樣輕鬆。
+OkaeriSplit 是一個以中文使用情境為核心設計的多人分帳 App，目標是讓「記錄消費、拆帳、看誰欠誰、完成結算」這整條流程更直覺、更少步驟。
 
-## 產品定位
+目前專案已包含 Flutter 主 App、Supabase 後端、以及用於群組分享頁的 Next.js Web。
 
-OkaeriSplit 針對台灣使用者設計，解決多人共同消費後「誰欠誰多少」的痛點。相比 Splitwise，我們追求更清晰的總覽介面、更少步驟的記帳流程，以及一目了然的欠款狀態。
+## 目前功能
 
-## 適用情境
-
-| 情境 | 範例 |
-|------|------|
-| 室友合租 | 房租、水電、日用品的長期分攤 |
-| 旅行分帳 | 機票、住宿、餐飲、門票 |
-| 聚餐活動 | 餐廳、KTV、團購等單次活動 |
-
-## 核心功能
-
-- **群組管理** — 建立群組、邀請碼加入、用戶搜尋邀請、成員管理、群組封存
-- **訪客成員** — 無需對方事先註冊即可邀請加入群組；訪客可認領帳號並升級為正式會員
-- **快速記帳** — 金額、付款人、分類、備註，Card 分區設計一目了然
-- **多種分帳** — 均分 / 自訂比例 / 指定金額 / 項目拆分
-- **欠款總覽** — 最簡化轉帳演算法，減少多餘轉帳筆數
-- **手動結算** — 標記已付款，記錄結算歷史
-- **消費篩選** — 關鍵字搜尋、分類 / 付款人 / 日期範圍篩選
-- **收據附件** — 拍照或從相簿選取，附件隨消費記錄保存
-- **消費統計** — 分類佔比圓餅圖、月度趨勢折線圖
-- **網頁分享** — 產生分享連結，無需安裝 App 即可瀏覽群組消費
-- **Realtime 同步** — Supabase Realtime，多人同時記帳即時更新
-- **離線記帳** — 無網路時仍可新增消費，網路恢復後自動同步
-- **iOS Home Widget** — 桌面 Widget 快速記帳，深度連結直達群組
-- **深色模式** — 完整 Light / Dark theme 支援
+- 群組建立、邀請碼加入、搜尋使用者邀請、群組封存
+- 訪客成員流程：可先以訪客身分加入，之後再認領或升級帳號
+- 消費新增 / 編輯 / 刪除，支援附件與備註
+- 多種分帳方式：均分 / 自訂比例 / 指定金額 / 項目拆分
+- 項目拆分可持久化保存品項、金額與對應分攤成員，並支援詳情檢視與重新編輯
+- 收據掃描流程：拍照或選圖後進行 OCR，整理出可供使用者確認的品項與金額
+- 消費搜尋與篩選：關鍵字、分類、付款人、日期區間
+- 欠款總覽與最小轉帳建議
+- 手動結算與結算紀錄
+- Dashboard 與消費統計圖表
+- Realtime 同步
+- 離線記帳與恢復連線後自動同步
+- 群組 Web 分享頁
+- iOS Home Widget / 深度連結快速進入群組或記帳
+- Light / Dark mode
 
 ## 技術棧
 
 | 層級 | 技術 |
-|------|------|
-| Framework | Flutter 3.41.0 / Dart 3.x |
+| --- | --- |
+| App | Flutter 3.x / Dart 3.x |
 | 狀態管理 | Riverpod |
 | 導航 | go_router |
-| 後端 | Supabase (Auth + PostgreSQL + Realtime + Storage) |
-| Edge Functions | Deno / TypeScript |
+| 後端 | Supabase（Auth / PostgreSQL / Realtime / Storage） |
 | 本地儲存 | Hive |
-| Data Class | freezed |
-| 錯誤處理 | fpdart (Either) |
-| 網頁分享 | Next.js (web/) |
-| CI/CD | Xcode Cloud |
+| 型別模型 | freezed / json_serializable |
+| 函式式錯誤處理 | fpdart（Either） |
+| OCR | google_mlkit_text_recognition |
+| 分享頁 | Next.js |
 
 ## 專案結構
 
+```text
+OkaeriSplit/
+├── app/                    # Flutter 主 App
+│   ├── lib/
+│   │   ├── core/           # theme、errors、services、共用元件
+│   │   ├── features/       # 依功能模組切分
+│   │   │   ├── auth/
+│   │   │   ├── dashboard/
+│   │   │   ├── expenses/
+│   │   │   ├── groups/
+│   │   │   ├── profile/
+│   │   │   ├── settlements/
+│   │   │   └── shell/
+│   │   ├── routing/
+│   │   └── main.dart
+│   └── ios/
+├── supabase/
+│   ├── functions/          # Edge Functions
+│   └── migrations/         # schema / policy / RPC migrations
+├── web/                    # 群組分享頁
+├── docs/                   # PRD、SPEC、TODO 與其他文件
+└── design-system/          # UI 設計資產與規格
 ```
-app/lib/
-├── core/           # 共用模組（theme、errors、constants、widgets、services）
-├── features/       # 功能模組（Clean Architecture）
-│   ├── auth/       # 登入 / 註冊（Email + Google + Apple + 訪客）
-│   ├── dashboard/  # 個人帳務總覽
-│   ├── groups/     # 群組管理（含封存、分享）
-│   ├── expenses/   # 消費記錄（含離線）
-│   ├── settlements/# 結算
-│   ├── profile/    # 個人設定
-│   └── shell/      # 底部導航殼
-├── routing/        # GoRouter 路由設定
-└── main.dart
 
-supabase/
-├── functions/      # Edge Functions（Deno）
-│   ├── create_guest_member/
-│   ├── claim_guest_member/
-│   ├── upgrade_guest_account/
-│   └── archive_group/
-└── migrations/     # PostgreSQL schema + RLS + RPC
+## 開發環境需求
 
-web/                # Next.js 網頁分享頁面
-```
+- Flutter SDK（對應 `app/pubspec.yaml`，目前為 Dart `^3.11.0`）
+- Xcode（iOS 開發）
+- Android Studio / Android SDK（Android 最低支援 API 24）
+- Node.js（Web 分享頁開發）
+- Supabase 專案
 
-## 開始開發
+## App 啟動方式
 
-### 1. 建立憑證檔
-
-複製範本並填入你的 Supabase 憑證：
+### 1. 建立 Flutter 環境設定
 
 ```bash
 cp app/dart_defines.example.json app/dart_defines.json
-# 編輯 dart_defines.json，填入 SUPABASE_URL 和 SUPABASE_ANON_KEY
 ```
 
-> `dart_defines.json` 已加入 `.gitignore`，不會進入版控。
+接著在 `app/dart_defines.json` 填入至少以下內容：
 
-### 2. 安裝依賴並執行
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+### 2. 安裝依賴並執行 App
 
 ```bash
 cd app
@@ -94,9 +91,11 @@ flutter pub get
 flutter run --dart-define-from-file=dart_defines.json
 ```
 
-### 3. Build
+### 3. 常用建置指令
 
 ```bash
+cd app
+
 # iOS
 flutter build ios --dart-define-from-file=dart_defines.json
 
@@ -104,33 +103,45 @@ flutter build ios --dart-define-from-file=dart_defines.json
 flutter build apk --dart-define-from-file=dart_defines.json
 ```
 
-> 使用 Xcode Archive 包版前，請先執行 `flutter build ios --dart-define-from-file=dart_defines.json` 以生成正確的環境設定。
+## Web 分享頁啟動方式
 
-## Supabase 手動設定
+```bash
+cd web
+npm install
+npm run dev
+```
 
-首次部署或功能啟用需在 Supabase Dashboard 手動操作：
+## Supabase 與手動設定
 
-| 項目 | 位置 | 說明 |
-|------|------|------|
-| `receipts` Storage bucket | Storage → New bucket | 收據/照片附件功能 |
-| Reset Password Redirect URL | Auth → URL Configuration → Redirect URLs | 加入 `com.raycat.okaerisplit://reset-password` |
+有些功能仍需在 Supabase / Xcode 端手動設定，程式碼不會自動建立：
 
-## Xcode Cloud CI
+- 建立 `receipts` Storage bucket 與對應 RLS policy
+- Supabase Redirect URL 加入 `com.raycat.okaerisplit://reset-password`
+- 確認 App Group：`group.com.raycat.okaerisplit`
 
-CI 透過 `app/ios/ci_scripts/ci_pre_xcodebuild.sh` 執行。
-需在 Xcode Cloud 的 Environment Variables 中設定以下 Secret：
+更完整的待辦與手動設定可參考 `docs/TODO.md`。
 
-| 變數名稱 | 說明 |
-|----------|------|
-| `SUPABASE_URL` | Supabase 專案 URL |
-| `SUPABASE_ANON_KEY` | Supabase Anon Key |
+## 驗證指令
+
+Flutter 端常用驗證：
+
+```bash
+cd app
+flutter analyze
+flutter test test/repository/expense_repository_test.dart test/widget/split_summary_test.dart
+```
 
 ## 文件
 
-- [產品需求 (PRD)](docs/PRD.md)
-- [技術規格 (SPEC)](docs/SPEC.md)
-- [開發計畫 (TODO)](docs/TODO.md)
+- `docs/PRD.md`：產品需求
+- `docs/SPEC.md`：技術規格
+- `docs/TODO.md`：手動設定、已知事項與後續規劃
+- `CLAUDE.md`：專案開發規範與工作方式
+
+## 版本
+
+目前 App 版本：`1.8.2+15`
 
 ## 授權
 
-Private — All rights reserved.
+Private repository. All rights reserved.
