@@ -118,10 +118,7 @@ class SupabaseGroupDataSource {
   }
 
   Future<void> deleteGroup(String groupId) async {
-    await _client.rpc(
-      'delete_group',
-      params: {'p_group_id': groupId},
-    );
+    await _client.rpc('delete_group', params: {'p_group_id': groupId});
   }
 
   Future<String> createShareLink(String groupId) async {
@@ -133,10 +130,7 @@ class SupabaseGroupDataSource {
   }
 
   Future<void> updateGroupName(String groupId, String name) async {
-    await _client
-        .from('groups')
-        .update({'name': name})
-        .eq('id', groupId);
+    await _client.from('groups').update({'name': name}).eq('id', groupId);
   }
 
   Future<List<GroupExchangeRateEntity>> getExchangeRates(String groupId) async {
@@ -144,11 +138,15 @@ class SupabaseGroupDataSource {
         .from('group_exchange_rates')
         .select('group_id, currency, rate')
         .eq('group_id', groupId);
-    return (response as List).map((row) => GroupExchangeRateEntity(
-          groupId: row['group_id'] as String,
-          currency: row['currency'] as String,
-          rate: (row['rate'] as num).toDouble(),
-        )).toList();
+    return (response as List)
+        .map(
+          (row) => GroupExchangeRateEntity(
+            groupId: row['group_id'] as String,
+            currency: row['currency'] as String,
+            rate: (row['rate'] as num).toDouble(),
+          ),
+        )
+        .toList();
   }
 
   Future<void> setExchangeRate(

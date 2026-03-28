@@ -14,10 +14,13 @@ class SimplifiedDebtRow extends StatelessWidget {
 
   final SimplifiedDebtEntity debt;
   final String currency;
+
   /// True when the current user is either the payer or the payee.
   final bool canPay;
+
   /// Resolved display name override for the from-user (disambiguation).
   final String? fromName;
+
   /// Resolved display name override for the to-user (disambiguation).
   final String? toName;
   final VoidCallback? onPay;
@@ -58,9 +61,9 @@ class SimplifiedDebtRow extends StatelessWidget {
                 Text(
                   '$currency ${debt.amount.toStringAsFixed(0)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -76,7 +79,7 @@ class SimplifiedDebtRow extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   padding: EdgeInsets.zero,
                 ),
-                child: const Text('付款'),
+                child: const Text('已付款'),
               ),
             ),
           ],
