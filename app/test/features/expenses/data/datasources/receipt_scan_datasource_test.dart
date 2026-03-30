@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.dart';
+import 'package:app/features/expenses/domain/entities/receipt_document_entity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
@@ -143,6 +144,75 @@ const _restaurantOrderSlipOcr = r'''
 實收金額：  2,193
 ''';
 
+const _weakColumnOcr = r'''
+領収書
+4901234567890
+¥358
+濃厚抹茶ラテ
+合計
+¥358
+''';
+
+const _taiwanInvoiceSummaryOcr = r'''
+六福村
+電子發篻證明聯
+115年01-02月
+WU-78965772
+2026-02-14 16:23:33
+隨機碼：2308  總計：180
+管方 11081274
+阿拉丁餐廳 322110 04 04917
+這雪憑電子發票證明聯正本辦哩
+X  C  G  H
+''';
+
+ReceiptDocumentEntity _nativeGroupedRegressionDocument() {
+  ReceiptLineEntity line(
+    String text, {
+    required int order,
+    required double top,
+  }) {
+    return ReceiptLineEntity(
+      text: text,
+      normalizedText: text,
+      boundingBox: ReceiptBoundingBoxEntity(
+        left: 0.1,
+        top: top,
+        width: 0.8,
+        height: 0.035,
+      ),
+      readingOrder: order,
+      words: const [],
+    );
+  }
+
+  return ReceiptDocumentEntity(
+    blocks: [
+      ReceiptBlockEntity(
+        text: '',
+        normalizedText: '',
+        boundingBox: const ReceiptBoundingBoxEntity(
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+        ),
+        readingOrder: 0,
+        lines: [
+          line('＜消耗品＞', order: 0, top: 0.18),
+          line('濃厚抹茶ラテ  ¥358', order: 1, top: 0.205),
+          line('合計', order: 2, top: 0.7),
+          line('¥358', order: 3, top: 0.735),
+        ],
+      ),
+    ],
+    text: '',
+    normalizedText: '',
+    pageWidth: 1,
+    pageHeight: 1,
+  );
+}
+
 void main() {
   late Directory tempDir;
   late File imageFile;
@@ -180,6 +250,8 @@ void main() {
       final result = datasource.parseRecognizedText(_badOcr);
 
       expect(result.lowConfidence, isTrue);
+      expect(result.document, isNotNull);
+      expect(result.document!.lines, isNotEmpty);
       expect(result.items.any((item) => item.name.startsWith('商品 ')), isFalse);
       expect(
         result.items.any(
@@ -189,6 +261,118 @@ void main() {
       );
       expect(result.items.any((item) => item.name.startsWith('條碼 ')), isTrue);
     });
+
+    test('builds a layout-aware fallback document from plain OCR text', () {
+      final result = datasource.parseRecognizedText(_completeNamesOcr);
+
+      expect(result.document, isNotNull);
+      expect(result.document!.blocks, hasLength(1));
+      expect(result.document!.lines.map((line) => line.text), contains('領収書'));
+      expect(
+        result.document!.lines
+            .expand((line) => line.words)
+            .map((word) => word.text),
+        contains('サガミオリジナル00110P'),
+      );
+    });
+
+    test('extracts structured fields from retail receipt text', () {
+      final extraction = datasource.extractFieldsFromText(_goodOcr);
+
+      expect(extraction.merchant, isNotNull);
+      expect(extraction.merchant!.value, contains('ダイコクドラッグ'));
+      expect(extraction.merchant!.confidence.score, greaterThan(0.5));
+      expect(extraction.total, isNotNull);
+      expect(extraction.total!.value, 8542);
+      expect(extraction.total!.confidence.score, greaterThan(0.5));
+      expect(extraction.documentConfidence.score, greaterThan(0.45));
+      expect(extraction.lineItems, isNotEmpty);
+      expect(
+        extraction.lineItems.any(
+          (item) => item.name.contains('サガミオリジナル00110P'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('extracts subtotal and total from restaurant order slip', () {
+      final extraction = datasource.extractFieldsFromText(
+        _restaurantOrderSlipOcr,
+      );
+
+      expect(extraction.subtotal, isNotNull);
+      expect(extraction.subtotal!.value, 1394);
+      expect(extraction.total, isNotNull);
+      expect(extraction.total!.value, 2193);
+      expect(
+        extraction.lineItems.every((item) => item.confidence.score > 0),
+        isTrue,
+      );
+      expect(
+        extraction.lineItems.any((item) => item.name.contains('招牌起司漢堡牛')),
+        isTrue,
+      );
+    });
+
+    test('derives lowConfidence from structured confidence aggregation', () {
+      final confident = datasource.parseRecognizedText(_goodOcr);
+      final uncertain = datasource.parseRecognizedText(_badOcr);
+
+      expect(confident.lowConfidence, isFalse);
+      expect(confident.extraction, isNotNull);
+      expect(
+        confident.extraction!.documentConfidence.level.name,
+        anyOf('high', 'medium'),
+      );
+
+      expect(uncertain.extraction, isNotNull);
+      expect(uncertain.lowConfidence, isTrue);
+      expect(uncertain.extraction!.documentConfidence.level.name, 'low');
+    });
+
+    test('refines fallback item names using nearby layout heuristics', () {
+      final result = datasource.parseRecognizedText(_weakColumnOcr);
+
+      expect(result.items, isNotEmpty);
+      expect(result.items.first.name, '濃厚抹茶ラテ');
+      expect(result.total, 358);
+      expect(result.lowConfidence, isFalse);
+    });
+
+    test(
+      'does not drop item rows when native OCR lines are vertically close',
+      () {
+        final extraction = datasource.extractFieldsFromDocument(
+          _nativeGroupedRegressionDocument(),
+        );
+
+        expect(
+          extraction.lineItems.any((item) => item.name.contains('濃厚抹茶ラテ')),
+          isTrue,
+        );
+        expect(extraction.total?.value, 358);
+      },
+    );
+
+    test(
+      'uses labeled total for Taiwan invoice summaries without fake items',
+      () {
+        final extraction = datasource.extractFieldsFromText(
+          _taiwanInvoiceSummaryOcr,
+        );
+        final result = datasource.parseRecognizedText(_taiwanInvoiceSummaryOcr);
+
+        expect(extraction.total, isNotNull);
+        expect(extraction.total!.value, 180);
+        expect(extraction.lineItems, isEmpty);
+
+        expect(result.total, 180);
+        expect(result.items, hasLength(1));
+        expect(result.items.first.name, '發票總計');
+        expect(result.items.first.amount, 180);
+        expect(result.lowConfidence, isTrue);
+      },
+    );
 
     test(
       'prefers candidate with more complete item names over longer noisy names',

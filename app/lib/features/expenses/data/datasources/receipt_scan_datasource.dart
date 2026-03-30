@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:app/features/expenses/domain/entities/receipt_confidence_entity.dart';
+import 'package:app/features/expenses/domain/entities/receipt_document_entity.dart';
+import 'package:app/features/expenses/domain/entities/receipt_field_extraction_entity.dart';
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -66,6 +69,33 @@ class _PriceToken {
   }
 }
 
+class _OcrCandidatePayload {
+  const _OcrCandidatePayload({required this.text, required this.document});
+
+  final String text;
+  final ReceiptDocumentEntity document;
+}
+
+class _ReceiptLayoutRow {
+  const _ReceiptLayoutRow({
+    required this.text,
+    required this.normalizedText,
+    required this.lineOrders,
+    required this.top,
+    required this.left,
+    required this.height,
+  });
+
+  final String text;
+  final String normalizedText;
+  final List<int> lineOrders;
+  final double top;
+  final double left;
+  final double height;
+
+  int get readingOrder => lineOrders.isEmpty ? 0 : lineOrders.first;
+}
+
 // ─── Datasource ──────────────────────────────────────────────────────────────
 
 class ReceiptScanDatasource {
@@ -111,6 +141,10 @@ class ReceiptScanDatasource {
         return emptyResult;
       }
       final bestEvaluation = _selectBestOcrEvaluation(candidates);
+      final bestDocument =
+          candidates[bestEvaluation.label]?.document ??
+          _buildDocumentModelFromText(bestEvaluation.text);
+      final extraction = _extractFields(bestDocument);
 
       debugPrint(
         '=== OCR OUTPUT (${bestEvaluation.label}) ===\n'
@@ -118,7 +152,12 @@ class ReceiptScanDatasource {
         '==================',
       );
 
-      final ruleResult = bestEvaluation.result;
+      final ruleResult = _mapExtractionToScanResult(
+        extraction,
+        fallbackResult: bestEvaluation.result,
+        rawText: bestEvaluation.text,
+        document: bestDocument,
+      );
       _logScanResult(ruleResult);
       return ruleResult;
     } finally {
@@ -130,13 +169,20 @@ class ReceiptScanDatasource {
     }
   }
 
-  Future<Map<String, String>> _collectOcrCandidates(
+  Future<Map<String, _OcrCandidatePayload>> _collectOcrCandidates(
     File imageFile, {
     required OcrLanguage language,
   }) async {
     final ocrCandidatesLoader = _ocrCandidatesLoader;
     if (ocrCandidatesLoader != null) {
-      return ocrCandidatesLoader(imageFile, language);
+      final loaded = await ocrCandidatesLoader(imageFile, language);
+      return {
+        for (final entry in loaded.entries)
+          entry.key: _OcrCandidatePayload(
+            text: entry.value,
+            document: _buildDocumentModelFromText(entry.value),
+          ),
+      };
     }
 
     if (Platform.isIOS) {
@@ -178,9 +224,10 @@ class ReceiptScanDatasource {
   );
 
   static final _labelPat = RegExp(
-    r'合計|小計|帳單|金額|消費税|税込|税額|免税|対象|お預り|お釣|現金|お支払|'
+    r'合計|總計|总计|小計|帳單|金額|消費税|税込|税額|免税|対象|お預り|お釣|現金|お支払|'
     r'支払|点数|ご請求額|お会計|QUICPay|登録番号|電話|TEL|http|www\.|'
-    r'TAX FREE|TOTAL|SUBTOTAL|領収書|レシート|消耗品|商店',
+    r'TAX FREE|TOTAL|SUBTOTAL|領収書|レシート|消耗品|商店|發[票篻]|发票|證明聯|证明联|'
+    r'隨機碼|随机码',
     caseSensitive: false,
   );
 
@@ -218,6 +265,619 @@ class ReceiptScanDatasource {
       lowConfidence: lowConf,
     );
     return _ReceiptParseAnalysis(result: result, matches: matches);
+  }
+
+  ReceiptFieldExtractionEntity _extractFields(ReceiptDocumentEntity document) {
+    final rows = _buildLayoutRows(document);
+    final extractedMerchant = _extractMerchant(rows);
+    final extractedSubtotal = _extractSubtotal(rows);
+    final extractedTax = _extractTax(rows);
+    final extractedTotal = _extractTotal(rows);
+    final footerStart = [
+      if (extractedSubtotal != null && extractedSubtotal.lineOrders.isNotEmpty)
+        extractedSubtotal.lineOrders.first,
+      if (extractedTax != null && extractedTax.lineOrders.isNotEmpty)
+        extractedTax.lineOrders.first,
+      if (extractedTotal != null && extractedTotal.lineOrders.isNotEmpty)
+        extractedTotal.lineOrders.first,
+    ];
+    final lineItems = _extractLineItems(
+      rows,
+      footerStart: footerStart.isEmpty
+          ? null
+          : footerStart.reduce((a, b) => a < b ? a : b),
+    );
+    final refined = _applyHeuristicReinforcements(
+      rows,
+      merchant: extractedMerchant,
+      subtotal: extractedSubtotal,
+      tax: extractedTax,
+      total: extractedTotal,
+      lineItems: lineItems,
+    );
+    return ReceiptFieldExtractionEntity(
+      merchant: refined.merchant,
+      subtotal: refined.subtotal,
+      tax: refined.tax,
+      total: refined.total,
+      documentConfidence: _buildDocumentConfidence(
+        merchant: refined.merchant,
+        subtotal: refined.subtotal,
+        tax: refined.tax,
+        total: refined.total,
+        lineItems: refined.lineItems,
+      ),
+      lineItems: refined.lineItems,
+    );
+  }
+
+  ScanResultEntity _mapExtractionToScanResult(
+    ReceiptFieldExtractionEntity extraction, {
+    required ScanResultEntity fallbackResult,
+    required String rawText,
+    required ReceiptDocumentEntity document,
+  }) {
+    final extractedItems = extraction.lineItems
+        .map(
+          (item) => ScanResultItemEntity(
+            name: item.name,
+            amount: item.amount,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          ),
+        )
+        .toList();
+    final shouldUseInvoiceSummaryFallback =
+        extractedItems.isEmpty &&
+        extraction.total != null &&
+        _looksLikeTaiwanInvoiceSummary(rawText);
+    final resolvedItems = extractedItems.isNotEmpty
+        ? extractedItems
+        : shouldUseInvoiceSummaryFallback
+        ? [
+            ScanResultItemEntity(
+              name: '發票總計',
+              amount: extraction.total!.value,
+              quantity: 1,
+            ),
+          ]
+        : fallbackResult.items;
+    final hasCriticalLowConfidence =
+        extraction.merchant == null ||
+        extraction.total == null ||
+        extraction.lineItems.any(
+          (item) => item.confidence.level == ReceiptConfidenceLevel.low,
+        );
+
+    return ScanResultEntity(
+      items: resolvedItems,
+      total: extraction.total?.value ?? fallbackResult.total,
+      rawText: rawText,
+      lowConfidence:
+          shouldUseInvoiceSummaryFallback ||
+          extraction.documentConfidence.level == ReceiptConfidenceLevel.low ||
+          hasCriticalLowConfidence,
+      document: document,
+      extraction: extraction,
+    );
+  }
+
+  List<_ReceiptLayoutRow> _buildLayoutRows(ReceiptDocumentEntity document) {
+    final lines = [...document.lines]
+      ..sort((a, b) {
+        final topDiff = a.boundingBox.top.compareTo(b.boundingBox.top);
+        if (topDiff != 0) return topDiff;
+        return a.boundingBox.left.compareTo(b.boundingBox.left);
+      });
+
+    return lines
+        .map(
+          (line) => _ReceiptLayoutRow(
+            text: line.text.trim(),
+            normalizedText: _normalizeLine(line.text),
+            lineOrders: [line.readingOrder],
+            top: line.boundingBox.top,
+            left: line.boundingBox.left,
+            height: line.boundingBox.height,
+          ),
+        )
+        .toList();
+  }
+
+  ReceiptTextFieldEntity? _extractMerchant(List<_ReceiptLayoutRow> rows) {
+    final candidates = <({ReceiptTextFieldEntity field, int score})>[];
+    for (var i = 0; i < rows.length && i < 6; i++) {
+      final row = rows[i];
+      final cleaned = _cleanMerchantText(row.text);
+      if (cleaned.isEmpty) continue;
+      if (_looksLikeReceiptMetadata(cleaned) || _isAddressLine(cleaned)) {
+        continue;
+      }
+      if (_isTotalLine(cleaned)) continue;
+      if (RegExp(r'^\d+$').hasMatch(cleaned)) continue;
+      final cjkCount = _cjkPat.allMatches(cleaned).length;
+      final latinCount = RegExp(r'[A-Za-z]').allMatches(cleaned).length;
+      final digitCount = RegExp(r'\d').allMatches(cleaned).length;
+      final score =
+          cjkCount * 10 + latinCount * 3 - digitCount * 2 + (60 - i * 8);
+      if (score <= 0) continue;
+      candidates.add((
+        field: ReceiptTextFieldEntity(
+          value: cleaned,
+          rawText: row.text,
+          lineOrders: row.lineOrders,
+          confidence: _buildMerchantConfidence(cleaned, row, rowIndex: i),
+        ),
+        score: score,
+      ));
+    }
+
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) => b.score.compareTo(a.score));
+    return candidates.first.field;
+  }
+
+  ReceiptAmountFieldEntity? _extractTotal(List<_ReceiptLayoutRow> rows) =>
+      _extractAmountField(
+        rows,
+        labelPattern: RegExp(
+          r'合計|總計|总计|総計|^合(?:\s|$)|實收金額|实收金额|應收金額|应收金额|お支払|ご請求額|お会計|TOTAL',
+          caseSensitive: false,
+        ),
+        preferNearbyLargest: true,
+      );
+
+  ReceiptAmountFieldEntity? _extractSubtotal(List<_ReceiptLayoutRow> rows) =>
+      _extractAmountField(
+        rows,
+        labelPattern: RegExp(
+          r'小計|原價小計|原价小计|SUBTOTAL|SUB TOTAL',
+          caseSensitive: false,
+        ),
+      );
+
+  ReceiptAmountFieldEntity? _extractTax(List<_ReceiptLayoutRow> rows) =>
+      _extractAmountField(
+        rows,
+        labelPattern: RegExp(r'消費税|消費稅|税額|TAX', caseSensitive: false),
+      );
+
+  ReceiptAmountFieldEntity? _extractAmountField(
+    List<_ReceiptLayoutRow> rows, {
+    required RegExp labelPattern,
+    bool preferNearbyLargest = false,
+  }) {
+    for (var i = rows.length - 1; i >= 0; i--) {
+      final row = rows[i];
+      if (!labelPattern.hasMatch(row.normalizedText)) continue;
+      final labelMatch = labelPattern.firstMatch(row.normalizedText);
+      final labelText = labelMatch?.group(0)?.trim() ?? '';
+      final labeledAmount = _extractAmountAdjacentToLabel(
+        row.normalizedText,
+        labelPattern,
+      );
+      final rowAmounts = _collectValidAmounts(row.normalizedText);
+      final trustInlineAmount =
+          labeledAmount != null &&
+          (!preferNearbyLargest || rowAmounts.length > 1 || labelText != '合');
+      if (trustInlineAmount) {
+        return ReceiptAmountFieldEntity(
+          value: labeledAmount,
+          rawText: row.text,
+          lineOrders: row.lineOrders,
+          confidence: _buildAmountFieldConfidence(
+            labelRow: row,
+            valueRow: row,
+            amount: labeledAmount,
+          ),
+        );
+      }
+      final directAmount = _largestValidAmount(row.normalizedText);
+      if (directAmount != null && !preferNearbyLargest) {
+        return ReceiptAmountFieldEntity(
+          value: directAmount,
+          rawText: row.text,
+          lineOrders: row.lineOrders,
+          confidence: _buildAmountFieldConfidence(
+            labelRow: row,
+            valueRow: row,
+            amount: directAmount,
+          ),
+        );
+      }
+      final nearbyRows = rows.skip(i).take(4).toList();
+      final nearbyCandidates = nearbyRows
+          .map((candidateRow) {
+            final amount = _largestValidAmount(candidateRow.normalizedText);
+            if (amount == null) return null;
+            return (amount: amount, row: candidateRow);
+          })
+          .whereType<({double amount, _ReceiptLayoutRow row})>()
+          .toList();
+      if (nearbyCandidates.isNotEmpty) {
+        nearbyCandidates.sort((a, b) => b.amount.compareTo(a.amount));
+        final best = nearbyCandidates.first;
+        return ReceiptAmountFieldEntity(
+          value: best.amount,
+          rawText: best.row == row ? row.text : '${row.text}\n${best.row.text}',
+          lineOrders: [...row.lineOrders, ...best.row.lineOrders],
+          confidence: _buildAmountFieldConfidence(
+            labelRow: row,
+            valueRow: best.row,
+            amount: best.amount,
+          ),
+        );
+      }
+    }
+    return null;
+  }
+
+  List<ReceiptExtractedLineItemEntity> _extractLineItems(
+    List<_ReceiptLayoutRow> rows, {
+    int? footerStart,
+  }) {
+    final scopedRows = rows
+        .where((row) => footerStart == null || row.readingOrder < footerStart)
+        .where((row) => !_looksLikeReceiptMetadata(row.normalizedText))
+        .where((row) => !_isAddressLine(row.normalizedText))
+        .toList();
+    if (scopedRows.isEmpty) return const [];
+    if (_looksLikeTaiwanInvoiceSummary(
+          rows.map((row) => row.text).join('\n'),
+        ) &&
+        !_hasStructuredItemEvidence(scopedRows)) {
+      return const [];
+    }
+
+    final startIndex = scopedRows.indexWhere(
+      (row) =>
+          _isItemName(row.normalizedText) ||
+          _trySameLine(row.normalizedText) != null ||
+          RegExp(r'^\d{8,}$').hasMatch(row.normalizedText.trim()),
+    );
+    final itemRows = startIndex >= 0
+        ? scopedRows.skip(startIndex).toList()
+        : scopedRows;
+    if (itemRows.isEmpty) return const [];
+
+    final parserLines = itemRows.map((row) => row.text).toList();
+    final parsed = _parseWithRules(parserLines).result.items;
+    if (parsed.isNotEmpty) {
+      return parsed.map((item) {
+        return ReceiptExtractedLineItemEntity(
+          name: item.name,
+          amount: item.amount,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineOrders: _matchItemLineOrders(item, itemRows),
+          confidence: _buildItemConfidence(
+            item,
+            _matchItemLineOrders(item, itemRows),
+          ),
+        );
+      }).toList();
+    }
+
+    final fallbackItems = <ReceiptExtractedLineItemEntity>[];
+    for (final row in itemRows) {
+      final pair = _trySameLine(row.normalizedText);
+      if (pair == null) continue;
+      fallbackItems.add(
+        ReceiptExtractedLineItemEntity(
+          name: pair.name,
+          amount: pair.amount,
+          quantity: pair.quantity,
+          unitPrice: pair.unitPrice,
+          lineOrders: row.lineOrders,
+          confidence: _buildItemConfidence(
+            ScanResultItemEntity(
+              name: pair.name,
+              amount: pair.amount,
+              quantity: pair.quantity,
+              unitPrice: pair.unitPrice,
+            ),
+            row.lineOrders,
+          ),
+        ),
+      );
+    }
+    return fallbackItems;
+  }
+
+  bool _hasStructuredItemEvidence(List<_ReceiptLayoutRow> rows) => rows.any(
+    (row) =>
+        RegExp(r'[¥$]\s*\d').hasMatch(row.normalizedText) ||
+        RegExp(r'\d{2,5}\s*[xX×]\s*\d').hasMatch(row.normalizedText) ||
+        RegExp(r'^\d{8,}$').hasMatch(row.normalizedText.trim()),
+  );
+
+  List<int> _matchItemLineOrders(
+    ScanResultItemEntity item,
+    List<_ReceiptLayoutRow> rows,
+  ) {
+    final compactName = _compactForMatch(item.name);
+    for (final row in rows) {
+      final rowCompact = _compactForMatch(_cleanName(row.normalizedText));
+      if (compactName.isNotEmpty && rowCompact.contains(compactName)) {
+        return row.lineOrders;
+      }
+    }
+
+    final amountText = item.amount.toStringAsFixed(
+      item.amount % 1 == 0 ? 0 : 2,
+    );
+    for (final row in rows) {
+      if (row.normalizedText.contains(amountText)) {
+        return row.lineOrders;
+      }
+    }
+    return const [];
+  }
+
+  String _cleanMerchantText(String raw) {
+    var text = _nfkc(raw);
+    text = text.replaceAll(RegExp(r'\d{2,4}[-−]\d{3,4}[-−]\d{4}'), ' ');
+    text = text.replaceAll(RegExp(r'T\d{6,}'), ' ');
+    text = text.replaceAll(RegExp(r'^\s*0S[-−]\d{4}[-−]\d{4}\s*'), ' ');
+    text = text.replaceAll(RegExp(r'\s{2,}'), ' ');
+    text = text.replaceAll(
+      RegExp(r'^[^A-Za-z0-9\u4e00-\u9fff\u3040-\u30ff]+'),
+      '',
+    );
+    text = text.replaceAll(
+      RegExp(r'[^A-Za-z0-9\u4e00-\u9fff\u3040-\u30ff]+$'),
+      '',
+    );
+    return text.trim();
+  }
+
+  String _compactForMatch(String text) => text
+      .replaceAll(RegExp(r'[^A-Za-z0-9\u4e00-\u9fff\u3040-\u30ff]+'), '')
+      .toLowerCase();
+
+  ({
+    ReceiptTextFieldEntity? merchant,
+    ReceiptAmountFieldEntity? subtotal,
+    ReceiptAmountFieldEntity? tax,
+    ReceiptAmountFieldEntity? total,
+    List<ReceiptExtractedLineItemEntity> lineItems,
+  })
+  _applyHeuristicReinforcements(
+    List<_ReceiptLayoutRow> rows, {
+    required ReceiptTextFieldEntity? merchant,
+    required ReceiptAmountFieldEntity? subtotal,
+    required ReceiptAmountFieldEntity? tax,
+    required ReceiptAmountFieldEntity? total,
+    required List<ReceiptExtractedLineItemEntity> lineItems,
+  }) {
+    final refinedItems = _applyPairingHeuristics(rows, lineItems);
+    final inferredSubtotal = subtotal ?? _inferSubtotalFromItems(refinedItems);
+
+    return (
+      merchant: merchant,
+      subtotal: inferredSubtotal,
+      tax: tax,
+      total: total,
+      lineItems: refinedItems,
+    );
+  }
+
+  List<ReceiptExtractedLineItemEntity> _applyPairingHeuristics(
+    List<_ReceiptLayoutRow> rows,
+    List<ReceiptExtractedLineItemEntity> items,
+  ) {
+    final claimedOrders = items.expand((item) => item.lineOrders).toSet();
+
+    return items.map((item) {
+      final shouldRefine =
+          item.confidence.level == ReceiptConfidenceLevel.low ||
+          _isFallbackItemName(item.name);
+      if (!shouldRefine) return item;
+
+      final anchorOrder = item.lineOrders.isEmpty ? null : item.lineOrders.last;
+      if (anchorOrder == null) return item;
+
+      final candidateRows =
+          rows.where((row) {
+            final distance = (row.readingOrder - anchorOrder).abs();
+            if (distance == 0 || distance > 2) return false;
+            if (claimedOrders.contains(row.readingOrder)) return false;
+            if (!_isItemName(row.normalizedText)) return false;
+            if (_looksLikeReceiptMetadata(row.normalizedText)) return false;
+            return _scoreItemNameQuality(_cleanName(row.text)) >
+                _scoreItemNameQuality(item.name);
+          }).toList()..sort((a, b) {
+            final qualityDiff = _scoreItemNameQuality(
+              _cleanName(b.text),
+            ).compareTo(_scoreItemNameQuality(_cleanName(a.text)));
+            if (qualityDiff != 0) return qualityDiff;
+            return (a.readingOrder - anchorOrder).abs().compareTo(
+              (b.readingOrder - anchorOrder).abs(),
+            );
+          });
+
+      if (candidateRows.isEmpty) return item;
+
+      final bestRow = candidateRows.first;
+      final refinedName = _cleanName(bestRow.text);
+      return ReceiptExtractedLineItemEntity(
+        name: refinedName,
+        amount: item.amount,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineOrders: [...bestRow.lineOrders, ...item.lineOrders],
+        confidence: _confidenceFromScore(
+          (item.confidence.score + 0.2).clamp(0.0, 1.0).toDouble(),
+          reasons: [...item.confidence.reasons, 'heuristic-pairing-reinforced'],
+        ),
+      );
+    }).toList();
+  }
+
+  ReceiptAmountFieldEntity? _inferSubtotalFromItems(
+    List<ReceiptExtractedLineItemEntity> items,
+  ) {
+    if (items.isEmpty) return null;
+    final subtotal = items.fold<double>(0, (sum, item) => sum + item.amount);
+    return ReceiptAmountFieldEntity(
+      value: subtotal,
+      rawText: 'inferred-from-line-items',
+      lineOrders: items.expand((item) => item.lineOrders).toList(),
+      confidence: _confidenceFromScore(
+        0.45,
+        reasons: const ['heuristic-field-inferred-subtotal'],
+      ),
+    );
+  }
+
+  ReceiptConfidenceEntity _buildMerchantConfidence(
+    String cleaned,
+    _ReceiptLayoutRow row, {
+    required int rowIndex,
+  }) {
+    var score = 0.45;
+    final reasons = <String>[];
+    final cjkCount = _cjkPat.allMatches(cleaned).length;
+    final digitCount = RegExp(r'\d').allMatches(cleaned).length;
+
+    if (cjkCount >= 4) {
+      score += 0.2;
+    } else {
+      reasons.add('merchant-name-short');
+    }
+    if (digitCount <= 4) {
+      score += 0.1;
+    } else {
+      score -= 0.1;
+      reasons.add('merchant-name-digit-heavy');
+    }
+    if (rowIndex <= 1 || row.top <= 0.12) {
+      score += 0.15;
+    } else {
+      reasons.add('merchant-not-in-header');
+    }
+
+    return _confidenceFromScore(score, reasons: reasons);
+  }
+
+  ReceiptConfidenceEntity _buildAmountFieldConfidence({
+    required _ReceiptLayoutRow labelRow,
+    required _ReceiptLayoutRow valueRow,
+    required double amount,
+  }) {
+    var score = 0.55;
+    final reasons = <String>[];
+    if (labelRow.readingOrder == valueRow.readingOrder) {
+      score += 0.25;
+    } else {
+      score += 0.1;
+      reasons.add('value-found-nearby');
+    }
+    if (amount >= 100) {
+      score += 0.1;
+    } else {
+      reasons.add('small-amount-fragment');
+    }
+    if ((valueRow.readingOrder - labelRow.readingOrder).abs() > 1) {
+      score -= 0.1;
+      reasons.add('label-value-gap');
+    }
+    return _confidenceFromScore(score, reasons: reasons);
+  }
+
+  ReceiptConfidenceEntity _buildItemConfidence(
+    ScanResultItemEntity item,
+    List<int> lineOrders,
+  ) {
+    var score = 0.4;
+    final reasons = <String>[];
+    final nameQuality = _scoreItemNameQuality(item.name);
+    score += (((nameQuality + 40) / 140).clamp(0.0, 0.35) as num).toDouble();
+    if (lineOrders.isNotEmpty) {
+      score += 0.15;
+    } else {
+      reasons.add('item-source-line-missing');
+    }
+    if (item.unitPrice != null) {
+      score += 0.1;
+    }
+    if (item.quantity > 1) {
+      score += 0.05;
+    }
+    if (_isFallbackItemName(item.name)) {
+      score -= 0.25;
+      reasons.add('fallback-item-name');
+    }
+    return _confidenceFromScore(score, reasons: reasons);
+  }
+
+  ReceiptConfidenceEntity _buildDocumentConfidence({
+    required ReceiptTextFieldEntity? merchant,
+    required ReceiptAmountFieldEntity? subtotal,
+    required ReceiptAmountFieldEntity? tax,
+    required ReceiptAmountFieldEntity? total,
+    required List<ReceiptExtractedLineItemEntity> lineItems,
+  }) {
+    final reasons = <String>[];
+    final scores = <double>[
+      if (merchant != null) merchant.confidence.score,
+      if (subtotal != null) subtotal.confidence.score,
+      if (tax != null) tax.confidence.score,
+      if (total != null) total.confidence.score,
+      ...lineItems.map((item) => item.confidence.score),
+    ];
+
+    var score = scores.isEmpty
+        ? 0.2
+        : scores.reduce((a, b) => a + b) / scores.length;
+
+    if (merchant == null) {
+      score -= 0.2;
+      reasons.add('merchant-missing');
+    }
+    if (total == null) {
+      score -= 0.25;
+      reasons.add('total-missing');
+    }
+    if (lineItems.isEmpty) {
+      score -= 0.3;
+      reasons.add('line-items-missing');
+    } else if (total != null) {
+      final itemSum = lineItems.fold<double>(
+        0,
+        (sum, item) => sum + item.amount,
+      );
+      if ((itemSum - total.value).abs() > total.value * 0.05) {
+        score -= 0.2;
+        reasons.add('total-item-mismatch');
+      }
+    }
+    final lowItemCount = lineItems
+        .where((item) => item.confidence.level == ReceiptConfidenceLevel.low)
+        .length;
+    if (lowItemCount > 0 && lineItems.isNotEmpty) {
+      score -= 0.15 + (lowItemCount / lineItems.length) * 0.25;
+      reasons.add('low-confidence-line-items');
+    }
+
+    return _confidenceFromScore(score, reasons: reasons);
+  }
+
+  ReceiptConfidenceEntity _confidenceFromScore(
+    double score, {
+    List<String> reasons = const [],
+  }) {
+    final normalized = (score.clamp(0.0, 1.0) as num).toDouble();
+    final level = normalized >= 0.75
+        ? ReceiptConfidenceLevel.high
+        : normalized >= 0.45
+        ? ReceiptConfidenceLevel.medium
+        : ReceiptConfidenceLevel.low;
+    return ReceiptConfidenceEntity(
+      score: normalized,
+      level: level,
+      reasons: reasons,
+    );
   }
 
   // ── Phase 1: Tokenize ────────────────────────────────────────────────────
@@ -522,7 +1182,7 @@ class ReceiptScanDatasource {
   }
 
   bool _isTotalLine(String line) => RegExp(
-    r'合計|小計|原價小計|原价小计|帳單|総計|計[:：$]|實收金額|实收金额|應收金額|应收金额|'
+    r'合計|總計|总计|小計|原價小計|原价小计|帳單|総計|計[:：$]|實收金額|实收金额|應收金額|应收金额|'
     r'お支払|お買上|税込合計|ご請求額|お会計|TOTAL|SUBTOTAL|SUB TOTAL',
     caseSensitive: false,
   ).hasMatch(line);
@@ -546,7 +1206,9 @@ class ReceiptScanDatasource {
   bool _looksLikeReceiptMetadata(String line) => RegExp(
     r'登録番号|登錄番号|領収書|領吸需|TAX\s*FREE|消耗品|免税額計|買上点数|お買上点数|'
     r'QUICPay|端\d+|No\d+|電話|TEL|仰利|點餐員|点餐員|單號|单号|大人|小孩|'
-    r'桌[A-Za-z0-9一二三四五六七八九十]|服務費|服务费',
+    r'桌[A-Za-z0-9一二三四五六七八九十]|服務費|服务费|電子?發[票篻]|电子?发票|'
+    r'證明聯|证明联|隨機碼|随机码|賣方|卖方|買方|买方|'
+    r'[A-Z]{2}[-−]\d{8}|\d{2,3}年\d{2}[-−]\d{2}月',
     caseSensitive: false,
   ).hasMatch(line);
 
@@ -761,6 +1423,38 @@ class ReceiptScanDatasource {
     return best;
   }
 
+  double? _extractAmountAdjacentToLabel(String line, RegExp labelPattern) {
+    final match = labelPattern.firstMatch(line);
+    if (match == null) return null;
+
+    final trailing = line
+        .substring(match.end)
+        .replaceFirst(RegExp(r'^[\s:：$¥]+'), '');
+    final trailingAmount = _firstValidAmount(trailing);
+    if (trailingAmount != null) return trailingAmount;
+
+    final leading = line.substring(0, match.start).trim();
+    if (leading.isEmpty) return null;
+
+    double? best;
+    for (final amountMatch in _numPat.allMatches(leading)) {
+      final parsed = _parseNum(amountMatch.group(0)!);
+      if (parsed != null) best = parsed;
+    }
+    return best;
+  }
+
+  List<double> _collectValidAmounts(String line) {
+    final amounts = <double>[];
+    for (final amountMatch in _numPat.allMatches(_normalizeLine(line))) {
+      final parsed = _parseNum(amountMatch.group(0)!);
+      if (parsed != null) {
+        amounts.add(parsed);
+      }
+    }
+    return amounts;
+  }
+
   double? _parseNum(String raw) {
     final s = _nfkc(raw).replaceAll(RegExp(r'[,，]'), '');
     if (s.length > 1 && s.startsWith('0') && !s.contains('.')) return null;
@@ -768,6 +1462,11 @@ class ReceiptScanDatasource {
     if (n == null || n <= 0 || n > 99999) return null;
     return n;
   }
+
+  bool _looksLikeTaiwanInvoiceSummary(String text) => RegExp(
+    r'電子?發[票篻]|电子?发票|證明聯|证明联|隨機碼|随机码|[A-Z]{2}[-−]\d{8}',
+    caseSensitive: false,
+  ).hasMatch(text);
 
   double _inferTotal(
     List<String> normalized,
@@ -786,74 +1485,105 @@ class ReceiptScanDatasource {
 
   static const _visionChannel = MethodChannel('com.okaeri.native_ocr');
 
-  Future<Map<String, String>> _collectVisionCandidates(
+  Future<Map<String, _OcrCandidatePayload>> _collectVisionCandidates(
     File imageFile, {
     required OcrLanguage language,
   }) async {
-    final candidates = <String, String>{};
+    final candidates = <String, _OcrCandidatePayload>{};
     final languages = language == OcrLanguage.auto
         ? const [OcrLanguage.japanese, OcrLanguage.chinese, OcrLanguage.english]
         : [language];
 
     for (var pass = 1; pass <= _ocrPassCount; pass++) {
       for (final candidateLanguage in languages) {
-        final text = await _recognizeVisionText(
+        final document = await _recognizeVisionDocument(
           imageFile,
           language: candidateLanguage,
         );
-        if (text.trim().isEmpty) continue;
-        candidates['ios:${candidateLanguage.name}:pass$pass'] = text;
+        if (document.text.trim().isEmpty) continue;
+        candidates['ios:${candidateLanguage.name}:pass$pass'] =
+            _OcrCandidatePayload(text: document.text, document: document);
       }
     }
 
     if (candidates.isEmpty) {
-      final fallback = await _recognizeVisionText(
+      final fallbackDocument = await _recognizeVisionDocument(
         imageFile,
         language: languages.first,
       );
-      if (fallback.trim().isNotEmpty) {
-        candidates['ios:${languages.first.name}:fallback'] = fallback;
+      if (fallbackDocument.text.trim().isNotEmpty) {
+        candidates['ios:${languages.first.name}:fallback'] =
+            _OcrCandidatePayload(
+              text: fallbackDocument.text,
+              document: fallbackDocument,
+            );
       }
     }
 
     return candidates;
   }
 
-  Future<String> _recognizeVisionText(
+  Future<ReceiptDocumentEntity> _recognizeVisionDocument(
     File imageFile, {
     required OcrLanguage language,
   }) async {
-    final text = await _visionChannel.invokeMethod<String>('recognizeText', {
-      'imagePath': imageFile.path,
-      'language': language.name,
-    });
-    return text ?? '';
+    final payload = await _visionChannel.invokeMethod<Object?>(
+      'recognizeText',
+      {'imagePath': imageFile.path, 'language': language.name},
+    );
+    if (payload is String) {
+      return _buildDocumentModelFromText(payload);
+    }
+    if (payload is Map) {
+      return _buildVisionDocumentModel(Map<String, dynamic>.from(payload));
+    }
+    return _buildDocumentModelFromText('');
   }
 
   @visibleForTesting
   ScanResultEntity parseRecognizedText(String ocrText) {
-    final lines = ocrText
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-    return _parseWithRules(lines).result;
+    final document = _buildDocumentModelFromText(ocrText);
+    final lines = document.lines.map((line) => line.text).toList();
+    final extraction = _extractFields(document);
+    return _mapExtractionToScanResult(
+      extraction,
+      fallbackResult: _parseWithRules(lines).result,
+      rawText: ocrText,
+      document: document,
+    );
+  }
+
+  @visibleForTesting
+  ReceiptFieldExtractionEntity extractFieldsFromText(String ocrText) {
+    final document = _buildDocumentModelFromText(ocrText);
+    return _extractFields(document);
+  }
+
+  @visibleForTesting
+  ReceiptFieldExtractionEntity extractFieldsFromDocument(
+    ReceiptDocumentEntity document,
+  ) {
+    return _extractFields(document);
   }
 
   @visibleForTesting
   String selectBestVisionText(Map<OcrLanguage, String> candidates) {
     final labeled = {
-      for (final entry in candidates.entries) entry.key.name: entry.value,
+      for (final entry in candidates.entries)
+        entry.key.name: _OcrCandidatePayload(
+          text: entry.value,
+          document: _buildDocumentModelFromText(entry.value),
+        ),
     };
     return _selectBestOcrEvaluation(labeled).text;
   }
 
   _OcrCandidateEvaluation _selectBestOcrEvaluation(
-    Map<String, String> candidates,
+    Map<String, _OcrCandidatePayload> candidates,
   ) {
     final evaluations =
         candidates.entries
-            .map((entry) => _evaluateOcrCandidate(entry.key, entry.value))
+            .map((entry) => _evaluateOcrCandidate(entry.key, entry.value.text))
             .toList()
           ..sort((a, b) {
             final scoreDiff = b.score.compareTo(a.score);
@@ -1016,21 +1746,27 @@ class ReceiptScanDatasource {
     return score;
   }
 
-  Future<Map<String, String>> _collectMlKitCandidates(
+  Future<Map<String, _OcrCandidatePayload>> _collectMlKitCandidates(
     File imageFile, {
     required OcrLanguage language,
   }) async {
-    final candidates = <String, String>{};
+    final candidates = <String, _OcrCandidatePayload>{};
     for (var pass = 1; pass <= _ocrPassCount; pass++) {
-      final text = await _extractWithMLKit(imageFile, language: language);
-      if (text.trim().isNotEmpty) {
-        candidates['android:${language.name}:pass$pass'] = text;
+      final document = await _extractWithMLKitDocument(
+        imageFile,
+        language: language,
+      );
+      if (document.text.trim().isNotEmpty) {
+        candidates['android:${language.name}:pass$pass'] = _OcrCandidatePayload(
+          text: document.text,
+          document: document,
+        );
       }
     }
     return candidates;
   }
 
-  Future<String> _extractWithMLKit(
+  Future<ReceiptDocumentEntity> _extractWithMLKitDocument(
     File imageFile, {
     OcrLanguage language = OcrLanguage.auto,
   }) async {
@@ -1038,35 +1774,282 @@ class ReceiptScanDatasource {
     final recognizer = TextRecognizer(script: _mlKitScriptFor(language));
     try {
       final recognized = await recognizer.processImage(inputImage);
-
-      final allLines = recognized.blocks.expand((b) => b.lines).toList();
-      if (allLines.isEmpty) return recognized.text;
-
-      allLines.sort((a, b) => a.boundingBox.top.compareTo(b.boundingBox.top));
-
-      const yThreshold = 15.0;
-      final rows = <List<dynamic>>[];
-      for (final line in allLines) {
-        final top = line.boundingBox.top.toDouble();
-        if (rows.isEmpty ||
-            top - rows.last.last.boundingBox.top.toDouble() > yThreshold) {
-          rows.add([line]);
-        } else {
-          rows.last.add(line);
-        }
-      }
-
-      return rows
-          .map((row) {
-            row.sort(
-              (a, b) => a.boundingBox.left.compareTo(b.boundingBox.left),
-            );
-            return row.map((l) => l.text as String).join('  ');
-          })
-          .join('\n');
+      return _buildMlKitDocumentModel(recognized, imageFile);
     } finally {
       await recognizer.close();
     }
+  }
+
+  ReceiptDocumentEntity _buildMlKitDocumentModel(
+    RecognizedText recognized,
+    File imageFile,
+  ) {
+    final decoded = img.decodeImage(imageFile.readAsBytesSync());
+    final pageWidth = decoded?.width.toDouble() ?? 1.0;
+    final pageHeight = decoded?.height.toDouble() ?? 1.0;
+    final blocks = <ReceiptBlockEntity>[];
+    var lineOrder = 0;
+    var wordOrder = 0;
+
+    for (
+      var blockIndex = 0;
+      blockIndex < recognized.blocks.length;
+      blockIndex++
+    ) {
+      final block = recognized.blocks[blockIndex];
+      final lines = block.lines.map((line) {
+        final words = line.elements.map((element) {
+          final box = element.boundingBox;
+          return ReceiptWordEntity(
+            text: element.text,
+            normalizedText: element.text.trim(),
+            boundingBox: _normalizeBox(
+              left: box.left.toDouble(),
+              top: box.top.toDouble(),
+              width: box.width.toDouble(),
+              height: box.height.toDouble(),
+              pageWidth: pageWidth,
+              pageHeight: pageHeight,
+            ),
+            readingOrder: wordOrder++,
+          );
+        }).toList();
+
+        final box = line.boundingBox;
+        return ReceiptLineEntity(
+          text: line.text,
+          normalizedText: line.text.trim(),
+          boundingBox: _normalizeBox(
+            left: box.left.toDouble(),
+            top: box.top.toDouble(),
+            width: box.width.toDouble(),
+            height: box.height.toDouble(),
+            pageWidth: pageWidth,
+            pageHeight: pageHeight,
+          ),
+          readingOrder: lineOrder++,
+          words: words,
+        );
+      }).toList();
+
+      final box = block.boundingBox;
+      blocks.add(
+        ReceiptBlockEntity(
+          text: lines.map((line) => line.text).join('\n'),
+          normalizedText: lines.map((line) => line.normalizedText).join('\n'),
+          boundingBox: _normalizeBox(
+            left: box.left.toDouble(),
+            top: box.top.toDouble(),
+            width: box.width.toDouble(),
+            height: box.height.toDouble(),
+            pageWidth: pageWidth,
+            pageHeight: pageHeight,
+          ),
+          readingOrder: blockIndex,
+          lines: lines,
+        ),
+      );
+    }
+
+    final text = _documentText(blocks);
+    return ReceiptDocumentEntity(
+      blocks: blocks,
+      text: text,
+      normalizedText: text.trim(),
+      pageWidth: pageWidth,
+      pageHeight: pageHeight,
+    );
+  }
+
+  ReceiptDocumentEntity _buildVisionDocumentModel(
+    Map<String, dynamic> payload,
+  ) {
+    final pageWidth = (payload['page_width'] as num?)?.toDouble() ?? 1.0;
+    final pageHeight = (payload['page_height'] as num?)?.toDouble() ?? 1.0;
+    final rawBlocks = (payload['blocks'] as List?) ?? const [];
+    final blocks = <ReceiptBlockEntity>[];
+
+    for (var blockIndex = 0; blockIndex < rawBlocks.length; blockIndex++) {
+      final blockJson = Map<String, dynamic>.from(rawBlocks[blockIndex] as Map);
+      final rawLines = (blockJson['lines'] as List?) ?? const [];
+      final lines = <ReceiptLineEntity>[];
+
+      for (var lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
+        final lineJson = Map<String, dynamic>.from(rawLines[lineIndex] as Map);
+        final rawWords = (lineJson['words'] as List?) ?? const [];
+        final words = <ReceiptWordEntity>[];
+
+        for (var wordIndex = 0; wordIndex < rawWords.length; wordIndex++) {
+          final wordJson = Map<String, dynamic>.from(
+            rawWords[wordIndex] as Map,
+          );
+          words.add(
+            ReceiptWordEntity(
+              text: wordJson['text'] as String? ?? '',
+              normalizedText: (wordJson['text'] as String? ?? '').trim(),
+              boundingBox: _boxFromJson(
+                Map<String, dynamic>.from(wordJson['bounding_box'] as Map),
+              ),
+              readingOrder:
+                  (wordJson['reading_order'] as num?)?.toInt() ??
+                  (lineIndex * 1000 + wordIndex),
+            ),
+          );
+        }
+
+        lines.add(
+          ReceiptLineEntity(
+            text: lineJson['text'] as String? ?? '',
+            normalizedText: (lineJson['text'] as String? ?? '').trim(),
+            boundingBox: _boxFromJson(
+              Map<String, dynamic>.from(lineJson['bounding_box'] as Map),
+            ),
+            readingOrder:
+                (lineJson['reading_order'] as num?)?.toInt() ?? lineIndex,
+            words: words,
+          ),
+        );
+      }
+
+      blocks.add(
+        ReceiptBlockEntity(
+          text:
+              blockJson['text'] as String? ??
+              lines.map((line) => line.text).join('\n'),
+          normalizedText:
+              (blockJson['text'] as String? ??
+                      lines.map((line) => line.text).join('\n'))
+                  .trim(),
+          boundingBox: _boxFromJson(
+            Map<String, dynamic>.from(blockJson['bounding_box'] as Map),
+          ),
+          readingOrder:
+              (blockJson['reading_order'] as num?)?.toInt() ?? blockIndex,
+          lines: lines,
+        ),
+      );
+    }
+
+    final text = (payload['text'] as String?) ?? _documentText(blocks);
+    return ReceiptDocumentEntity(
+      blocks: blocks,
+      text: text,
+      normalizedText: text.trim(),
+      pageWidth: pageWidth,
+      pageHeight: pageHeight,
+    );
+  }
+
+  ReceiptDocumentEntity _buildDocumentModelFromText(String text) {
+    final rawLines = text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (rawLines.isEmpty) {
+      return const ReceiptDocumentEntity(
+        blocks: [],
+        text: '',
+        normalizedText: '',
+        pageWidth: 1,
+        pageHeight: 1,
+      );
+    }
+
+    final lines = <ReceiptLineEntity>[];
+    for (var i = 0; i < rawLines.length; i++) {
+      final lineText = rawLines[i];
+      final lineTop = i / rawLines.length;
+      final rawWords = lineText
+          .split(RegExp(r'\s+'))
+          .where((word) => word.isNotEmpty)
+          .toList();
+      final wordWidth = rawWords.isEmpty ? 1.0 : 1 / rawWords.length;
+      final words = <ReceiptWordEntity>[];
+      for (var j = 0; j < rawWords.length; j++) {
+        words.add(
+          ReceiptWordEntity(
+            text: rawWords[j],
+            normalizedText: rawWords[j].trim(),
+            boundingBox: ReceiptBoundingBoxEntity(
+              left: j * wordWidth,
+              top: lineTop,
+              width: wordWidth,
+              height: 1 / rawLines.length,
+            ),
+            readingOrder: i * 1000 + j,
+          ),
+        );
+      }
+
+      lines.add(
+        ReceiptLineEntity(
+          text: lineText,
+          normalizedText: lineText.trim(),
+          boundingBox: ReceiptBoundingBoxEntity(
+            left: 0,
+            top: lineTop,
+            width: 1,
+            height: 1 / rawLines.length,
+          ),
+          readingOrder: i,
+          words: words,
+        ),
+      );
+    }
+
+    final block = ReceiptBlockEntity(
+      text: rawLines.join('\n'),
+      normalizedText: rawLines.join('\n'),
+      boundingBox: const ReceiptBoundingBoxEntity(
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+      ),
+      readingOrder: 0,
+      lines: lines,
+    );
+
+    return ReceiptDocumentEntity(
+      blocks: [block],
+      text: rawLines.join('\n'),
+      normalizedText: rawLines.join('\n'),
+      pageWidth: 1,
+      pageHeight: 1,
+    );
+  }
+
+  ReceiptBoundingBoxEntity _boxFromJson(Map<String, dynamic> json) {
+    return ReceiptBoundingBoxEntity(
+      left: (json['left'] as num?)?.toDouble() ?? 0,
+      top: (json['top'] as num?)?.toDouble() ?? 0,
+      width: (json['width'] as num?)?.toDouble() ?? 0,
+      height: (json['height'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  ReceiptBoundingBoxEntity _normalizeBox({
+    required double left,
+    required double top,
+    required double width,
+    required double height,
+    required double pageWidth,
+    required double pageHeight,
+  }) {
+    return ReceiptBoundingBoxEntity(
+      left: pageWidth <= 0 ? 0 : left / pageWidth,
+      top: pageHeight <= 0 ? 0 : top / pageHeight,
+      width: pageWidth <= 0 ? 0 : width / pageWidth,
+      height: pageHeight <= 0 ? 0 : height / pageHeight,
+    );
+  }
+
+  String _documentText(List<ReceiptBlockEntity> blocks) {
+    final lines = <ReceiptLineEntity>[
+      for (final block in blocks) ...block.lines,
+    ]..sort((a, b) => a.readingOrder.compareTo(b.readingOrder));
+    return lines.map((line) => line.text).join('\n');
   }
 
   TextRecognitionScript _mlKitScriptFor(OcrLanguage language) {

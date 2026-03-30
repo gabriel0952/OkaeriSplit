@@ -59,11 +59,46 @@ import Vision
             }
           }
 
-          var text = rows.map { row in
-            row.sorted { $0.boundingBox.minX < $1.boundingBox.minX }
-               .compactMap { $0.topCandidates(1).first?.string }
-               .joined(separator: "  ")
-          }.joined(separator: "\n")
+          let linePayloads: [[String: Any]] = rows.enumerated().map { rowIndex, row in
+            let sortedRow = row.sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+            let wordPayloads: [[String: Any]] = sortedRow.enumerated().compactMap { wordIndex, observation in
+              guard let candidate = observation.topCandidates(1).first else { return nil }
+              return [
+                "text": candidate.string,
+                "reading_order": rowIndex * 1000 + wordIndex,
+                "bounding_box": [
+                  "left": observation.boundingBox.minX,
+                  "top": 1 - observation.boundingBox.minY - observation.boundingBox.height,
+                  "width": observation.boundingBox.width,
+                  "height": observation.boundingBox.height
+                ]
+              ]
+            }
+
+            let text = wordPayloads
+              .compactMap { $0["text"] as? String }
+              .joined(separator: "  ")
+            let minX = sortedRow.map { $0.boundingBox.minX }.min() ?? 0
+            let maxX = sortedRow.map { $0.boundingBox.maxX }.max() ?? 0
+            let minY = sortedRow.map { $0.boundingBox.minY }.min() ?? 0
+            let maxY = sortedRow.map { $0.boundingBox.maxY }.max() ?? 0
+
+            return [
+              "text": text,
+              "reading_order": rowIndex,
+              "bounding_box": [
+                "left": minX,
+                "top": 1 - maxY,
+                "width": maxX - minX,
+                "height": maxY - minY
+              ],
+              "words": wordPayloads
+            ]
+          }
+
+          var text = linePayloads
+            .compactMap { $0["text"] as? String }
+            .joined(separator: "\n")
 
           // Re-join numbers split at a thousands comma by Vision:
           // "4  ,455" → "4,455"
@@ -73,7 +108,24 @@ import Vision
               in: text, range: range, withTemplate: "$1,$2")
           }
 
-          result(text)
+          let payload: [String: Any] = [
+            "text": text,
+            "page_width": cgImage.width,
+            "page_height": cgImage.height,
+            "blocks": [[
+              "text": text,
+              "reading_order": 0,
+              "bounding_box": [
+                "left": 0,
+                "top": 0,
+                "width": 1,
+                "height": 1
+              ],
+              "lines": linePayloads
+            ]]
+          ]
+
+          result(payload)
         }
         // Language priority based on caller hint
         let lang = args["language"] as? String ?? "auto"
