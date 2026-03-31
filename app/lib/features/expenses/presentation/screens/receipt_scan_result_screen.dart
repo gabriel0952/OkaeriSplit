@@ -458,6 +458,17 @@ class _ReceiptScanResultScreenState
         children: [
           // ── Photo preview ──────────────────────────────────────────────────
           _buildPhotoPreview(colorScheme),
+          if (widget.method != ReceiptScanMethod.gemini)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+              child: Text(
+                '本機辨識 · 建議確認品項金額是否正確',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           const SizedBox(height: 12),
 
           // ── Gemini extras (merchant / date / currency / tax / category) ────
@@ -568,6 +579,17 @@ class _ReceiptScanResultScreenState
                       ),
                     ),
                   ),
+                  if (widget.method != ReceiptScanMethod.gemini) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('返回並改用 Gemini AI 辨識'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -596,7 +618,7 @@ class _ReceiptScanResultScreenState
               fit: BoxFit.cover,
               opacity: AlwaysStoppedAnimation(dimmed ? 0.4 : 1.0),
             ),
-            if (!dimmed)
+            if (!dimmed) ...[
               Positioned(
                 bottom: 10,
                 right: 10,
@@ -622,6 +644,43 @@ class _ReceiptScanResultScreenState
                   ),
                 ),
               ),
+              Positioned(
+                bottom: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.method == ReceiptScanMethod.gemini
+                            ? Icons.auto_awesome
+                            : Icons.phone_iphone,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.method == ReceiptScanMethod.gemini
+                            ? 'Gemini AI'
+                            : '本機 OCR',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -800,8 +859,8 @@ class _ReceiptScanResultScreenState
                         ),
                         Text(
                           taxType == GeminiTaxType.included
-                              ? '内税 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''} 已含在品項金額中'
-                              : '外税 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''} 加算於總金額',
+                              ? '内含稅 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''}（開啟後從品項扣除）'
+                              : '外加稅 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''}（開啟後從總額扣除）',
                           style: TextStyle(
                             fontSize: 12,
                             color: colorScheme.onSurfaceVariant,
@@ -1417,7 +1476,7 @@ class _GeminiExtrasCard extends StatelessWidget {
         _row(
           Icons.calendar_today_outlined,
           '消費日期',
-          '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+          '${d.year}年${d.month}月${d.day}日',
         ),
       );
     }
@@ -1426,9 +1485,9 @@ class _GeminiExtrasCard extends StatelessWidget {
     }
     if (extras.taxAmount != null || extras.taxType != null) {
       final taxLabel = switch (extras.taxType) {
-        GeminiTaxType.included => '内税',
-        GeminiTaxType.excluded => '外税',
-        GeminiTaxType.exempt => '免税',
+        GeminiTaxType.included => '内含稅',
+        GeminiTaxType.excluded => '外加稅',
+        GeminiTaxType.exempt => '免稅',
         null => null,
       };
       final taxParts = [
@@ -1443,38 +1502,43 @@ class _GeminiExtrasCard extends StatelessWidget {
       }
     }
     if (extras.suggestedCategory != null) {
-      rows.add(
-        _row(
-          Icons.label_outline,
-          '建議分類',
-          extras.suggestedCategory!.label,
-        ),
-      );
+      rows.add(_categoryRow(context, extras.suggestedCategory!.label));
     }
 
     if (rows.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Gemini 辨識資訊',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurfaceVariant,
+    return Card(
+      elevation: 0,
+      color: colorScheme.secondaryContainer.withValues(alpha: 0.35),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 14,
+                  color: colorScheme.secondary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Gemini 辨識資訊',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.secondary,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          ...rows.expand((w) => [w, const SizedBox(height: 4)]).toList()
-            ..removeLast(),
-        ],
+            const SizedBox(height: 10),
+            ...rows.expand((w) => [w, const SizedBox(height: 8)]).toList()
+              ..removeLast(),
+          ],
+        ),
       ),
     );
   }
@@ -1483,17 +1547,39 @@ class _GeminiExtrasCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: 6),
+        Icon(icon, size: 16, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
         Text(
           '$label：',
-          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+          style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
         ),
         Expanded(
           child: Text(
             value,
-            style: TextStyle(fontSize: 12, color: colorScheme.onSurface),
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _categoryRow(BuildContext context, String label) {
+    return Row(
+      children: [
+        Icon(Icons.label_outline, size: 16, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          '建議分類：',
+          style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+        ),
+        Chip(
+          label: Text(label, style: const TextStyle(fontSize: 12)),
+          padding: EdgeInsets.zero,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          side: BorderSide.none,
+          backgroundColor: colorScheme.secondaryContainer,
         ),
       ],
     );
