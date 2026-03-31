@@ -1,0 +1,2 @@
+[functions.scan_receipt_gemini]
+verify_jwt = false

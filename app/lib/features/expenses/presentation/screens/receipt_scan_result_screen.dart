@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import 'package:app/features/expenses/data/datasources/receipt_scan_datasource.dart';
+import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/domain/entities/gemini_scan_extras_entity.dart';
+import 'package:app/features/expenses/domain/entities/receipt_scan_method.dart';
 import 'package:app/features/expenses/domain/entities/scan_result_entity.dart';
 import 'package:app/features/expenses/presentation/providers/receipt_scan_provider.dart';
 import 'package:app/features/groups/domain/entities/group_entity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 /// Data returned to AddExpenseScreen after user confirms import.
 class ReceiptImportData {
@@ -15,6 +19,8 @@ class ReceiptImportData {
     required this.total,
     required this.imageFile,
     this.currency,
+    this.merchant,
+    this.date,
     this.itemMemberIds = const [],
   });
 
@@ -25,6 +31,12 @@ class ReceiptImportData {
   /// Selected currency, null = keep AddExpenseScreen's current currency.
   final String? currency;
 
+  /// Merchant / store name extracted by Gemini, null if not available.
+  final String? merchant;
+
+  /// Purchase date extracted by Gemini, null if not available.
+  final DateTime? date;
+
   /// Per-item member assignment (parallel to [items]).
   /// Empty set = all members (default).
   final List<Set<String>> itemMemberIds;
@@ -34,13 +46,16 @@ class ReceiptScanResultScreen extends ConsumerStatefulWidget {
   const ReceiptScanResultScreen({
     super.key,
     required this.imageFile,
+    required this.method,
     this.language = OcrLanguage.auto,
     this.members = const [],
     this.availableCurrencies = const [],
     this.initialCurrency,
+    this.groupId,
   });
 
   final File imageFile;
+  final ReceiptScanMethod method;
   final OcrLanguage language;
 
   /// Group members for per-item assignment. Empty = hide member UI.
@@ -52,6 +67,9 @@ class ReceiptScanResultScreen extends ConsumerStatefulWidget {
   /// Pre-selected currency (the group / expense currency).
   final String? initialCurrency;
 
+  /// Group ID used to navigate to group settings for exchange-rate setup.
+  final String? groupId;
+
   @override
   ConsumerState<ReceiptScanResultScreen> createState() =>
       _ReceiptScanResultScreenState();
@@ -60,12 +78,16 @@ class ReceiptScanResultScreen extends ConsumerStatefulWidget {
 class _ReceiptScanResultScreenState
     extends ConsumerState<ReceiptScanResultScreen> {
   List<ScanResultItemEntity> _items = [];
+  List<ScanResultItemEntity> _originalItems = [];
+  double _originalTotal = 0;
+  bool _excludeTax = false;
   List<UniqueKey> _itemKeys = [];
   List<Set<String>> _itemMemberIds = [];
   double _total = 0;
   bool _totalManuallyEdited = false;
   bool _lowConfidence = false;
   String? _currency;
+  GeminiScanExtras? _geminiExtras;
   final _totalController = TextEditingController();
 
   @override
@@ -87,6 +109,9 @@ class _ReceiptScanResultScreenState
 
   void _onScanResult(ScanResultEntity result) {
     setState(() {
+      _originalItems = List.of(result.items);
+      _originalTotal = result.total;
+      _excludeTax = false;
       _items = List.of(result.items);
       _itemKeys = List.generate(_items.length, (_) => UniqueKey());
       _itemMemberIds = List.generate(
@@ -97,6 +122,51 @@ class _ReceiptScanResultScreenState
       _totalController.text = _total > 0 ? _total.toStringAsFixed(0) : '';
       _totalManuallyEdited = false;
       _lowConfidence = result.lowConfidence;
+      _geminiExtras = result.geminiExtras;
+      // Auto-apply currency detected by Gemini if the user hasn't overridden it.
+      if (_currency == widget.initialCurrency &&
+          result.geminiExtras?.currency != null) {
+        _currency = result.geminiExtras!.currency;
+      }
+    });
+  }
+
+  /// Applies or removes tax exclusion from item amounts and total.
+  void _applyTaxExclusion(bool exclude) {
+    final taxType = _geminiExtras?.taxType;
+    final isIncluded = taxType == GeminiTaxType.included;
+
+    setState(() {
+      _excludeTax = exclude;
+
+      if (isIncluded) {
+        _items = exclude
+            ? _originalItems.map((item) {
+                final tax = item.itemTaxAmount ?? 0.0;
+                return item.copyWith(
+                  amount: (item.amount - tax).clamp(0.0, double.infinity),
+                );
+              }).toList()
+            : List.of(_originalItems);
+        final sum = _items.fold(0.0, (s, e) => s + e.amount);
+        _total = sum;
+        _totalController.text = sum > 0 ? sum.toStringAsFixed(0) : '';
+        _totalManuallyEdited = false;
+      } else {
+        // 外税: items already hold pre-tax amounts; only the total changes.
+        _items = List.of(_originalItems);
+        if (exclude) {
+          final sum = _items.fold(0.0, (s, e) => s + e.amount);
+          _total = sum;
+          _totalController.text = sum > 0 ? sum.toStringAsFixed(0) : '';
+          _totalManuallyEdited = false;
+        } else {
+          _total = _originalTotal;
+          _totalController.text =
+              _originalTotal > 0 ? _originalTotal.toStringAsFixed(0) : '';
+          _totalManuallyEdited = true;
+        }
+      }
     });
   }
 
@@ -148,6 +218,8 @@ class _ReceiptScanResultScreenState
         total: total,
         imageFile: widget.imageFile,
         currency: _currency,
+        merchant: _geminiExtras?.merchant,
+        date: _geminiExtras?.date,
         itemMemberIds: List.of(_itemMemberIds),
       ),
     );
@@ -168,10 +240,21 @@ class _ReceiptScanResultScreenState
 
   void _rescan() => ref
       .read(receiptScanProvider.notifier)
-      .scan(widget.imageFile, language: widget.language);
+      .scan(
+        widget.imageFile,
+        language: widget.language,
+        method: widget.method,
+        userId: ref.read(authStateProvider).valueOrNull?.id,
+      );
 
   Future<void> _showCurrencyPicker() async {
-    if (widget.availableCurrencies.length <= 1) return;
+    // Include any Gemini-detected currency that isn't in the configured list.
+    final currencies = [
+      ...widget.availableCurrencies,
+      if (_currency != null && !widget.availableCurrencies.contains(_currency!))
+        _currency!,
+    ];
+    if (currencies.length <= 1) return;
     await showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -188,7 +271,7 @@ class _ReceiptScanResultScreenState
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
-            ...widget.availableCurrencies.map(
+            ...currencies.map(
               (c) => ListTile(
                 title: Text(c),
                 trailing: _currency == c
@@ -316,7 +399,9 @@ class _ReceiptScanResultScreenState
         const CircularProgressIndicator(),
         const SizedBox(height: 16),
         Text(
-          '正在分析收據...',
+          widget.method == ReceiptScanMethod.gemini
+              ? '正在使用 Gemini 分析收據...'
+              : '正在分析收據...',
           style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 6),
@@ -375,6 +460,12 @@ class _ReceiptScanResultScreenState
           _buildPhotoPreview(colorScheme),
           const SizedBox(height: 12),
 
+          // ── Gemini extras (merchant / date / currency / tax / category) ────
+          if (_geminiExtras != null) ...[
+            _GeminiExtrasCard(extras: _geminiExtras!, colorScheme: colorScheme),
+            const SizedBox(height: 10),
+          ],
+
           // ── Low-confidence warning ─────────────────────────────────────────
           if (_lowConfidence) ...[
             Container(
@@ -409,6 +500,14 @@ class _ReceiptScanResultScreenState
           // ── Total + currency ───────────────────────────────────────────────
           _buildTotalCard(colorScheme),
           const SizedBox(height: 12),
+
+          // ── Exchange-rate setup reminder ───────────────────────────────────
+          if (_currency != null &&
+              !widget.availableCurrencies.contains(_currency!) &&
+              widget.groupId != null) ...[
+            _buildExchangeRateWarning(colorScheme),
+            const SizedBox(height: 10),
+          ],
 
           // ── Items header ───────────────────────────────────────────────────
           Row(
@@ -529,8 +628,64 @@ class _ReceiptScanResultScreenState
     );
   }
 
+  Widget _buildExchangeRateWarning(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: colorScheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '幣別 $_currency 尚未在群組設定匯率，匯入後計算可能不正確。',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () {
+              context.push('/groups/${widget.groupId}/settings');
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              visualDensity: VisualDensity.compact,
+              foregroundColor: colorScheme.onTertiaryContainer,
+            ),
+            child: const Text(
+              '前往設定',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTotalCard(ColorScheme colorScheme) {
-    final hasCurrencyChoice = widget.availableCurrencies.length > 1;
+    // Show currency picker if there are multiple configured currencies OR if
+    // Gemini detected a currency not yet in the configured list.
+    final detectedNotInList =
+        _currency != null && !widget.availableCurrencies.contains(_currency!);
+    final hasCurrencyChoice =
+        widget.availableCurrencies.length > 1 || detectedNotInList;
+
+    // Show tax toggle only when Gemini reported a taxable type and a tax amount.
+    final taxType = _geminiExtras?.taxType;
+    final taxAmount = _geminiExtras?.taxAmount ?? 0;
+    final showTaxToggle = taxType != null &&
+        taxType != GeminiTaxType.exempt &&
+        taxAmount > 0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -626,6 +781,40 @@ class _ReceiptScanResultScreenState
                     ],
                   ),
                 ),
+              ),
+            ],
+            if (showTaxToggle) ...[
+              const Divider(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '扣除稅金',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          taxType == GeminiTaxType.included
+                              ? '内税 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''} 已含在品項金額中'
+                              : '外税 ${taxAmount.toStringAsFixed(0)} ${_currency ?? ''} 加算於總金額',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _excludeTax,
+                    onChanged: _applyTaxExclusion,
+                  ),
+                ],
               ),
             ],
           ],
@@ -1202,6 +1391,111 @@ class _FullscreenPhotoDialogState extends State<_FullscreenPhotoDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _GeminiExtrasCard extends StatelessWidget {
+  const _GeminiExtrasCard({
+    required this.extras,
+    required this.colorScheme,
+  });
+
+  final GeminiScanExtras extras;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+
+    if (extras.merchant != null) {
+      rows.add(_row(Icons.store_outlined, '店家', extras.merchant!));
+    }
+    if (extras.date != null) {
+      final d = extras.date!;
+      rows.add(
+        _row(
+          Icons.calendar_today_outlined,
+          '消費日期',
+          '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+        ),
+      );
+    }
+    if (extras.currency != null) {
+      rows.add(_row(Icons.currency_exchange_outlined, '幣別', extras.currency!));
+    }
+    if (extras.taxAmount != null || extras.taxType != null) {
+      final taxLabel = switch (extras.taxType) {
+        GeminiTaxType.included => '内税',
+        GeminiTaxType.excluded => '外税',
+        GeminiTaxType.exempt => '免税',
+        null => null,
+      };
+      final taxParts = [
+        ?taxLabel,
+        if (extras.taxAmount != null && extras.taxAmount! > 0)
+          '${extras.taxAmount!.toStringAsFixed(0)} ${extras.currency ?? ''}',
+      ];
+      if (taxParts.isNotEmpty) {
+        rows.add(
+          _row(Icons.receipt_long_outlined, '稅金（參考）', taxParts.join(' · ')),
+        );
+      }
+    }
+    if (extras.suggestedCategory != null) {
+      rows.add(
+        _row(
+          Icons.label_outline,
+          '建議分類',
+          extras.suggestedCategory!.label,
+        ),
+      );
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Gemini 辨識資訊',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...rows.expand((w) => [w, const SizedBox(height: 4)]).toList()
+            ..removeLast(),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(
+          '$label：',
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurface),
+          ),
+        ),
+      ],
     );
   }
 }

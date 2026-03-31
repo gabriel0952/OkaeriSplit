@@ -9,6 +9,8 @@ import 'package:app/core/widgets/app_error_widget.dart';
 import 'package:app/core/widgets/app_loading_widget.dart';
 import 'package:app/core/utils/resolve_display_name.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/domain/entities/receipt_scan_method.dart';
+import 'package:app/features/expenses/presentation/providers/gemini_scan_settings_provider.dart';
 import 'package:app/features/expenses/domain/entities/expense_entity.dart';
 import 'package:app/features/expenses/domain/entities/expense_item_entity.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
@@ -323,15 +325,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           final exchangeRateCurrencies =
               exchangeRatesAsync.valueOrNull?.map((r) => r.currency).toList() ??
               [];
-          final availableCurrencies = [
+          final availableCurrencies = <String>[
             groupCurrency,
             ...exchangeRateCurrencies,
           ];
           _selectedCurrency ??= groupCurrency;
-          // Reset to group currency if the previously selected currency
-          // no longer has an exchange rate configured.
-          if (!availableCurrencies.contains(_selectedCurrency)) {
-            _selectedCurrency = groupCurrency;
+          // If a currency was imported from a receipt scan but isn't configured
+          // with an exchange rate yet, add it to the list so the user can keep
+          // or change it rather than having it silently reset.
+          if (!availableCurrencies.contains(_selectedCurrency!)) {
+            availableCurrencies.add(_selectedCurrency!);
           }
 
           return _buildLayout(
@@ -623,7 +626,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     BuildContext context,
     List<String> availableCurrencies,
   ) {
-    if (availableCurrencies.length <= 1) return;
+    if (availableCurrencies.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('尚未設定其他幣別匯率，請至群組設定新增'),
+          action: SnackBarAction(
+            label: '前往設定',
+            onPressed: () => context.push('/groups/${widget.groupId}/settings'),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
@@ -1909,16 +1924,27 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   // ─── Receipt Scan ─────────────────────────────────────────────────────────
 
   Future<void> _startReceiptScan() async {
+    final currentUser = ref.read(authStateProvider).valueOrNull;
+    final initialGeminiSettings = currentUser == null
+        ? null
+        : await ref
+              .read(geminiScanSettingsControllerProvider)
+              .loadCurrentUserSettings();
+    if (!mounted) return;
+
     // Step 1: Pick image source + receipt language
     final selection =
         await showModalBottomSheet<
-          ({ImageSource source, OcrLanguage language})
+          ({ImageSource source, OcrLanguage language, ReceiptScanMethod method})
         >(
           context: context,
           useSafeArea: true,
           isScrollControlled: true,
           builder: (context) {
             var selectedLanguage = OcrLanguage.auto;
+            var selectedMethod =
+                initialGeminiSettings?.preferredMethod ??
+                ReceiptScanMethod.local;
             return StatefulBuilder(
               builder: (context, setSheetState) => SafeArea(
                 top: false,
@@ -1946,6 +1972,95 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Text(
+                                  '掃描方案',
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: ReceiptScanMethod.values.map((
+                                    method,
+                                  ) {
+                                    final isSelected = selectedMethod == method;
+                                    final colorScheme = Theme.of(
+                                      context,
+                                    ).colorScheme;
+                                    return GestureDetector(
+                                      onTap: () => setSheetState(
+                                        () => selectedMethod = method,
+                                      ),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 150,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? colorScheme.primaryContainer
+                                                    .withValues(alpha: 0.85)
+                                              : colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? colorScheme.primary
+                                                : colorScheme.outlineVariant,
+                                            width: isSelected ? 1.6 : 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          method.label,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge
+                                              ?.copyWith(
+                                                color: isSelected
+                                                    ? colorScheme.primary
+                                                    : colorScheme.onSurface,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                                const SizedBox(height: 12),
+                                if (selectedMethod == ReceiptScanMethod.gemini)
+                                  Text(
+                                    'Gemini 掃描需要網路與已設定的 API key，並會消耗你自己的 API key 配額與費用。',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          height: 1.5,
+                                        ),
+                                  )
+                                else
+                                  Text(
+                                    '在裝置本地分析圖片，無需網路，但辨識準確度可能較低。',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          height: 1.5,
+                                        ),
+                                  ),
+                                const SizedBox(height: 20),
                                 Text(
                                   '辨識語言',
                                   style: Theme.of(context).textTheme.labelLarge
@@ -2037,6 +2152,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                   onTap: () => Navigator.pop(context, (
                                     source: ImageSource.camera,
                                     language: selectedLanguage,
+                                    method: selectedMethod,
                                   )),
                                 ),
                                 const SizedBox(height: 12),
@@ -2047,6 +2163,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                   onTap: () => Navigator.pop(context, (
                                     source: ImageSource.gallery,
                                     language: selectedLanguage,
+                                    method: selectedMethod,
                                   )),
                                 ),
                               ],
@@ -2062,6 +2179,89 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           },
         );
     if (selection == null) return;
+    if (!mounted) return;
+
+    if (currentUser != null) {
+      await ref
+          .read(geminiScanSettingsControllerProvider)
+          .setPreferredMethod(selection.method);
+      if (!mounted) return;
+    }
+
+    if (selection.method == ReceiptScanMethod.gemini) {
+      if (currentUser == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('請先登入帳號後再使用 Gemini 掃描')));
+        return;
+      }
+
+      final isOnline = ref.read(isOnlineProvider);
+      if (!isOnline) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Gemini 掃描需要網路連線')));
+        return;
+      }
+
+      final settings =
+          initialGeminiSettings ??
+          await ref
+              .read(geminiScanSettingsControllerProvider)
+              .loadCurrentUserSettings();
+      if (!mounted) return;
+
+      if (!settings.hasApiKey) {
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('尚未設定 Gemini API key'),
+            content: const Text('請先到「我的」頁面設定 Gemini API key 後再使用 Gemini 掃描。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('前往設定'),
+              ),
+            ],
+          ),
+        );
+
+        if (openSettings == true && mounted) {
+          context.push('/profile');
+        }
+        return;
+      }
+
+      if (!settings.hasAcknowledgedUsageNotice) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('使用 Gemini 掃描'),
+            content: const Text(
+              'Gemini usage 會消耗你自己的 API key 配額與費用，且圖片會透過 Okaeri 代理送往 Gemini 分析。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('我知道了'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        await ref
+            .read(geminiScanSettingsControllerProvider)
+            .markUsageNoticeAcknowledged();
+      }
+    }
 
     // Step 2: Pick image
     final picked = await _imagePicker.pickImage(
@@ -2090,10 +2290,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       MaterialPageRoute(
         builder: (_) => ReceiptScanResultScreen(
           imageFile: File(picked.path),
+          method: selection.method,
           language: selection.language,
           members: members,
           availableCurrencies: availableCurrencies,
           initialCurrency: _selectedCurrency ?? groupCurrency,
+          groupId: widget.groupId,
         ),
       ),
     );
@@ -2110,9 +2312,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         data.total == data.total.roundToDouble() ? 0 : 2,
       );
 
-      // Set description
+      // Set description — prefer merchant name from Gemini, fallback to generic label.
       if (_descriptionController.text.trim().isEmpty) {
-        _descriptionController.text = '收據掃描';
+        _descriptionController.text =
+            (data.merchant?.isNotEmpty ?? false) ? data.merchant! : '收據掃描';
+      }
+
+      // Apply purchase date from Gemini if user hasn't touched the date field.
+      if (data.date != null && _expenseDate.day == DateTime.now().day &&
+          _expenseDate.month == DateTime.now().month &&
+          _expenseDate.year == DateTime.now().year) {
+        _expenseDate = data.date!;
       }
 
       // Switch to itemized split and populate items

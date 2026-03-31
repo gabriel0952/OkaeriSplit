@@ -3,7 +3,9 @@ import 'package:app/core/theme/theme_provider.dart';
 import 'package:app/core/widgets/offline_banner.dart';
 import 'package:app/features/auth/domain/entities/user_entity.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:app/features/expenses/presentation/providers/gemini_scan_settings_provider.dart';
 import 'package:app/features/profile/presentation/providers/profile_provider.dart';
+import 'package:app/features/profile/presentation/widgets/gemini_scan_settings_sheet.dart';
 import 'package:app/features/profile/presentation/widgets/edit_payment_info_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,167 +19,244 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileProvider);
     final isOnline = ref.watch(isOnlineProvider);
+    final geminiSettingsAsync = ref.watch(currentGeminiScanSettingsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('我的')),
       body: Column(
         children: [
           const OfflineBanner(),
-          Expanded(child: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text(error.toString())),
-        data: (profile) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const SizedBox(height: 16),
-              Center(
-                child: CircleAvatar(
-                  radius: 48,
-                  backgroundImage: profile.avatarUrl != null
-                      ? NetworkImage(profile.avatarUrl!)
-                      : null,
-                  child: profile.avatarUrl == null
-                      ? Text(
-                          profile.displayName.isNotEmpty
-                              ? profile.displayName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(fontSize: 36),
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                child: Column(
+          Expanded(
+            child: profileAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(child: Text(error.toString())),
+              data: (profile) {
+                return ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    ListTile(
-                      title: const Text('顯示名稱'),
-                      subtitle: Text(profile.displayName),
-                      trailing: Icon(Icons.edit,
-                          color: isOnline ? null : Theme.of(context).colorScheme.onSurfaceVariant),
-                      onTap: isOnline
-                          ? () => _editDisplayName(context, ref, profile.displayName)
-                          : () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('離線時無法編輯個人資料')),
-                              ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      title: const Text('電子郵件'),
-                      subtitle: Text(profile.email),
-                    ),
-                    if (!profile.isGuest) ...[
-                      const Divider(height: 1),
-                      ListTile(
-                        title: const Text('匯款資訊'),
-                        subtitle: profile.paymentInfo != null
+                    const SizedBox(height: 16),
+                    Center(
+                      child: CircleAvatar(
+                        radius: 48,
+                        backgroundImage: profile.avatarUrl != null
+                            ? NetworkImage(profile.avatarUrl!)
+                            : null,
+                        child: profile.avatarUrl == null
                             ? Text(
-                                '${profile.paymentInfo!.bankName} (${profile.paymentInfo!.bankCode})${profile.paymentInfo!.accountNumber}',
+                                profile.displayName.isNotEmpty
+                                    ? profile.displayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(fontSize: 36),
                               )
-                            : const Text('尚未設定'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: isOnline
-                            ? () => _editPaymentInfo(context, ref, profile)
-                            : () => ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('離線時無法編輯個人資料')),
-                                ),
+                            : null,
                       ),
-                    ],
-                    const Divider(height: 1),
-                    ListTile(
-                      title: const Text('預設幣別'),
-                      subtitle: Text(profile.defaultCurrency),
-                      trailing: Icon(Icons.edit,
-                          color: isOnline ? null : Theme.of(context).colorScheme.onSurfaceVariant),
-                      onTap: isOnline
-                          ? () => _editCurrency(context, ref, profile.defaultCurrency)
-                          : () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('離線時無法編輯個人資料')),
-                              ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.dark_mode_outlined),
-                      title: const Text('深色模式'),
-                      trailing: DropdownButton<ThemeMode>(
-                        value: ref.watch(themeModeProvider),
-                        underline: const SizedBox.shrink(),
-                        onChanged: (mode) {
-                          if (mode != null) {
-                            ref.read(themeModeProvider.notifier).set(mode);
-                          }
-                        },
-                        items: const [
-                          DropdownMenuItem(
-                            value: ThemeMode.system,
-                            child: Text('跟隨系統'),
+                    const SizedBox(height: 24),
+                    Card(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            title: const Text('顯示名稱'),
+                            subtitle: Text(profile.displayName),
+                            trailing: Icon(
+                              Icons.edit,
+                              color: isOnline
+                                  ? null
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            onTap: isOnline
+                                ? () => _editDisplayName(
+                                    context,
+                                    ref,
+                                    profile.displayName,
+                                  )
+                                : () => ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                        const SnackBar(
+                                          content: Text('離線時無法編輯個人資料'),
+                                        ),
+                                      ),
                           ),
-                          DropdownMenuItem(
-                            value: ThemeMode.light,
-                            child: Text('淺色'),
+                          const Divider(height: 1),
+                          ListTile(
+                            title: const Text('電子郵件'),
+                            subtitle: Text(profile.email),
                           ),
-                          DropdownMenuItem(
-                            value: ThemeMode.dark,
-                            child: Text('深色'),
+                          if (!profile.isGuest) ...[
+                            const Divider(height: 1),
+                            ListTile(
+                              title: const Text('匯款資訊'),
+                              subtitle: profile.paymentInfo != null
+                                  ? Text(
+                                      '${profile.paymentInfo!.bankName} (${profile.paymentInfo!.bankCode})${profile.paymentInfo!.accountNumber}',
+                                    )
+                                  : const Text('尚未設定'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: isOnline
+                                  ? () =>
+                                        _editPaymentInfo(context, ref, profile)
+                                  : () => ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                          const SnackBar(
+                                            content: Text('離線時無法編輯個人資料'),
+                                          ),
+                                        ),
+                            ),
+                          ],
+                          const Divider(height: 1),
+                          ListTile(
+                            title: const Text('預設幣別'),
+                            subtitle: Text(profile.defaultCurrency),
+                            trailing: Icon(
+                              Icons.edit,
+                              color: isOnline
+                                  ? null
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            onTap: isOnline
+                                ? () => _editCurrency(
+                                    context,
+                                    ref,
+                                    profile.defaultCurrency,
+                                  )
+                                : () => ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                        const SnackBar(
+                                          content: Text('離線時無法編輯個人資料'),
+                                        ),
+                                      ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('確認登出'),
-                      content: const Text('確定要登出嗎？'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text('取消'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          style: TextButton.styleFrom(
-                            foregroundColor:
-                                Theme.of(context).colorScheme.error,
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.dark_mode_outlined),
+                            title: const Text('深色模式'),
+                            trailing: DropdownButton<ThemeMode>(
+                              value: ref.watch(themeModeProvider),
+                              underline: const SizedBox.shrink(),
+                              onChanged: (mode) {
+                                if (mode != null) {
+                                  ref
+                                      .read(themeModeProvider.notifier)
+                                      .set(mode);
+                                }
+                              },
+                              items: const [
+                                DropdownMenuItem(
+                                  value: ThemeMode.system,
+                                  child: Text('跟隨系統'),
+                                ),
+                                DropdownMenuItem(
+                                  value: ThemeMode.light,
+                                  child: Text('淺色'),
+                                ),
+                                DropdownMenuItem(
+                                  value: ThemeMode.dark,
+                                  child: Text('深色'),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: const Text('登出'),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  );
-                  if (confirmed == true) {
-                    ref.read(signOutUseCaseProvider).call();
-                  }
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text('登出'),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _deleteAccount(context, ref),
-                icon: const Icon(Icons.delete_forever),
-                label: const Text('刪除帳號'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  foregroundColor: Theme.of(context).colorScheme.onError,
-                ),
-              ),
-            ],
-          );
-        },
-      )),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: geminiSettingsAsync.when(
+                        loading: () => const ListTile(
+                          leading: Icon(Icons.cloud_outlined),
+                          title: Text('Gemini 掃描'),
+                          subtitle: Text('讀取設定中...'),
+                        ),
+                        error: (_, _) => const ListTile(
+                          leading: Icon(Icons.cloud_outlined),
+                          title: Text('Gemini 掃描'),
+                          subtitle: Text('無法讀取設定'),
+                        ),
+                        data: (settings) => ListTile(
+                          leading: const Icon(Icons.cloud_outlined),
+                          title: const Text('Gemini 掃描'),
+                          subtitle: Text(
+                            settings == null
+                                ? '請先登入帳號後再設定'
+                                : settings.hasApiKey
+                                ? '已設定 ${settings.maskedApiKey ?? ''}'
+                                : '尚未設定 API key',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: isOnline
+                              ? () => _editGeminiScanSettings(
+                                  context,
+                                  ref,
+                                  settings?.maskedApiKey,
+                                )
+                              : () =>
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('離線時無法編輯個人資料'),
+                                      ),
+                                    ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('確認登出'),
+                            content: const Text('確定要登出嗎？'),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('取消'),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
+                                ),
+                                child: const Text('登出'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          ref.read(signOutUseCaseProvider).call();
+                        }
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: const Text('登出'),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => _deleteAccount(context, ref),
+                      icon: const Icon(Icons.delete_forever),
+                      label: const Text('刪除帳號'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        foregroundColor: Theme.of(context).colorScheme.onError,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -226,15 +305,15 @@ class ProfileScreen extends ConsumerWidget {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (_) {
         ref.invalidate(profileProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已更新顯示名稱')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已更新顯示名稱')));
       },
     );
   }
@@ -254,9 +333,9 @@ class ProfileScreen extends ConsumerWidget {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('刪除失敗：${failure.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刪除失敗：${failure.message}')));
       },
       (_) {
         // Account deleted, auth state change will redirect to login
@@ -295,8 +374,9 @@ class ProfileScreen extends ConsumerWidget {
             child: Text(
               currency,
               style: TextStyle(
-                fontWeight:
-                    currency == currentCurrency ? FontWeight.bold : null,
+                fontWeight: currency == currentCurrency
+                    ? FontWeight.bold
+                    : null,
               ),
             ),
           );
@@ -321,17 +401,37 @@ class ProfileScreen extends ConsumerWidget {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (_) {
         ref.invalidate(profileProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已更新預設幣別為 $selected')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已更新預設幣別為 $selected')));
       },
     );
+  }
+
+  Future<void> _editGeminiScanSettings(
+    BuildContext context,
+    WidgetRef ref,
+    String? maskedApiKey,
+  ) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => GeminiScanSettingsSheet(maskedApiKey: maskedApiKey),
+    );
+
+    if (updated == true && context.mounted) {
+      ref.invalidate(currentGeminiScanSettingsProvider);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已更新 Gemini 掃描設定')));
+    }
   }
 }
 
