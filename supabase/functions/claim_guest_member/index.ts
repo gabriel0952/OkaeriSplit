@@ -108,6 +108,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Invalidate claim_code so it cannot be reused to generate another magic link.
+    await supabaseAdmin
+      .from('profiles')
+      .update({ claim_code: null })
+      .eq('id', profile.id);
+
     return new Response(
       JSON.stringify({
         hashed_token: linkData.properties.hashed_token,

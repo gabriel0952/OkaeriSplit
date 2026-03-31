@@ -73,7 +73,7 @@ class SupabaseGroupDataSource {
   Future<List<GroupMemberEntity>> getGroupMembers(String groupId) async {
     final response = await _client
         .from('group_members')
-        .select('*, profiles(id, display_name, email, avatar_url, is_guest)')
+        .select('*, profiles(id, display_name, email, avatar_url, is_guest, claim_code)')
         .eq('group_id', groupId);
 
     return (response as List).map((row) {
@@ -90,6 +90,7 @@ class SupabaseGroupDataSource {
         role: row['role'] as String? ?? 'member',
         joinedAt: DateTime.parse(row['joined_at'] as String),
         isGuest: profile?['is_guest'] as bool? ?? false,
+        claimCode: profile?['claim_code'] as String?,
       );
     }).toList();
   }

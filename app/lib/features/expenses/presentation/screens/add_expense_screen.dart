@@ -699,6 +699,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
+              maxLength: 100,
+              buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
               onChanged: (_) => setState(() {}),
             ),
           ),
@@ -1227,7 +1229,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
+              maxLength: 300,
               maxLines: 2,
+              buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
             ),
 
             Divider(

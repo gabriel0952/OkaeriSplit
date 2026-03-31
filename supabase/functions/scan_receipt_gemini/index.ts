@@ -13,7 +13,8 @@ const RATE_LIMIT_WINDOW_MS = 60_000
 const MODEL_TIMEOUT_MS = 25_000
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
 
-// Try models in order; fall back on 429 / 503 to reduce rate-limit failures.
+// Try models in order; fall back on 404 / 429 / 503 to reduce rate-limit and
+// model-availability failures (e.g. 2.5-flash returns 404 on some API key tiers).
 const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
 
 const TAX_TYPES = new Set(['included', 'excluded', 'exempt'])
@@ -129,82 +130,24 @@ function buildPrompt(languageHint: string) {
     : 'Detect the receipt language automatically. Keep item names and merchant name in their original language.'
 
   return `
-You are extracting structured expense data from a receipt image for a group expense-splitting app.
+Extract receipt data for a group expense-splitting app. ${languageLine}
 
-${languageLine}
-
-Return JSON only, with no markdown fences and no additional commentary.
-The JSON MUST follow this schema exactly:
-{
-  "items": [
-    {
-      "name": "string",
-      "amount": number,
-      "quantity": number,
-      "unit_price": number | null,
-      "item_tax_amount": number | null
-    }
-  ],
-  "total": number,
-  "low_confidence": boolean,
-  "raw_text": "string",
-  "merchant": "string | null",
-  "date": "YYYY-MM-DD | null",
-  "currency": "string | null",
-  "tax_amount": number | null,
-  "tax_type": "included | excluded | exempt | null",
-  "suggested_category": "餐飲 | 交通 | 購物 | 住宿 | 娛樂 | 醫藥 | 其他 | null"
-}
+Return JSON only — no markdown, no commentary:
+{"items":[{"name":"string","amount":number,"quantity":number,"unit_price":number|null,"item_tax_amount":number|null}],"total":number,"low_confidence":boolean,"raw_text":"string","merchant":"string|null","date":"YYYY-MM-DD|null","currency":"string|null","tax_amount":number|null,"tax_type":"included|excluded|exempt|null","suggested_category":"餐飲|交通|購物|住宿|娛樂|醫藥|其他|null"}
 
 RULES:
-
-1. TOTAL: Use the final total printed on the receipt (after all discounts and taxes).
-   - 外税 (exclusive tax, tax added at bottom): total INCLUDES the tax shown at the bottom.
-   - 内税 (inclusive tax, tax in prices): total is the grand total on receipt.
-   - 免税 (tax-exempt / duty-free): total is the pre-tax price shown.
-
-2. TAX:
-   - tax_type "excluded" = 外税 (tax listed separately at the bottom)
-   - tax_type "included" = 内税 (tax embedded in item prices)
-   - tax_type "exempt"   = 免税 / duty-free
-   - Set tax_amount to the actual tax charged (0 if exempt, null if not determinable).
-   - Japan receipts may have two tax rates (8% food, 10% non-food); sum both into tax_amount.
-
-3. PER-ITEM TAX (item_tax_amount):
-   - For tax_type "included" (内税): set item_tax_amount for each item to the tax portion
-     embedded in that item's price. Example: price 110円 at 10% → item_tax_amount = 10.
-     If only a blended rate is visible, distribute proportionally. Set null if indeterminate.
-   - For tax_type "excluded" (外税): items already represent pre-tax amounts, so
-     item_tax_amount should be null for each item (tax is captured in tax_amount instead).
-   - For tax_type "exempt": item_tax_amount is null.
-
-4. DISCOUNTS: Discounts (割引 / 値引 / member discount / coupon etc.) must be reflected
-   in the final total. Show them as negative-amount items if they appear as line items on
-   the receipt, so the user can see what was deducted.
-
-5. SELF-VALIDATE: After filling in all items, verify that sum(items[].amount) is
-   reasonably close to "total" (allow for rounding ±5 and tax differences).
-   If the discrepancy is large and unexplained, re-examine the receipt image and set
-   low_confidence to true.
-
-6. ITEMS:
-   - "items" may be empty only if no reliable itemization can be extracted.
-   - "name" must be a human-readable item name, not noise or metadata.
-   - "amount" is the total amount for the line (quantity × unit_price if applicable).
-   - Translate item names according to the translation rule above.
-
-7. MERCHANT: Store, restaurant, or shop name. Translate if translation rule applies. Null if not found.
-
-8. DATE: Extract the purchase date as YYYY-MM-DD. Return null if not found.
-
-9. CURRENCY: Return ISO 4217 code (e.g. "JPY", "TWD", "USD", "EUR"). Return null if unclear.
-
-10. SUGGESTED_CATEGORY: Pick the best-fit category based on items and merchant.
-    Return null if unclear or ambiguous.
-
-11. RAW_TEXT: A concise text reconstruction of the key receipt content, not an explanation.
-
-12. If uncertain about the overall result quality, set low_confidence to true.
+1. TOTAL: Final printed total (after discounts + taxes). 外税: include bottom-line tax. 内税: grand total. 免税: pre-tax amount.
+2. TAX: "excluded"=外税(tax separate), "included"=内税(tax in price), "exempt"=免税. tax_amount = actual tax (0 if exempt, null if unknown). Japan: sum 8%+10% rates.
+3. ITEM TAX: included→item_tax_amount = embedded tax per item (distribute proportionally if blended rate); excluded/exempt→null per item.
+4. DISCOUNTS: Reflect in total. Show as negative-amount line items if printed on receipt.
+5. VALIDATE: Verify sum(items.amount) ≈ total (±5 allowed). If large unexplained gap, set low_confidence=true.
+6. ITEMS: Empty only if no reliable items found. name = human-readable, not metadata. amount = quantity×unit_price.
+7. MERCHANT: Shop/restaurant name. Null if not found.
+8. DATE: YYYY-MM-DD. Null if not found.
+9. CURRENCY: ISO 4217 (JPY/TWD/USD/EUR…). Null if unclear.
+10. CATEGORY: Best-fit from enum. Null if ambiguous.
+11. RAW_TEXT: Key receipt content only, ≤200 characters.
+12. low_confidence=true if overall result quality is uncertain.
 `.trim()
 }
 
@@ -360,8 +303,9 @@ async function callGeminiWithFallback(
       )
       clearTimeout(tid)
 
-      // On 429 or 503, try the next model if available.
-      if (!isLast && (resp.status === 429 || resp.status === 503)) continue
+      // On 404/429/503, try the next model if available.
+      // 404 = model not available for this API key tier or region.
+      if (!isLast && (resp.status === 404 || resp.status === 429 || resp.status === 503)) continue
 
       return resp
     } catch (err) {
@@ -420,7 +364,8 @@ Deno.serve(async (req) => {
     assertBase64Payload(image_base64)
     assertMimeType(mime_type)
 
-    const langHint = typeof language_hint === 'string' ? language_hint : 'auto'
+    const VALID_LANGS = new Set(['auto', 'chinese', 'japanese', 'english'])
+    const langHint = typeof language_hint === 'string' && VALID_LANGS.has(language_hint) ? language_hint : 'auto'
 
     let upstreamResponse: Response
     try {

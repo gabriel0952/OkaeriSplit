@@ -2,6 +2,7 @@ import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/features/profile/domain/entities/payment_info_entity.dart';
 import 'package:app/features/profile/presentation/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class EditPaymentInfoSheet extends ConsumerStatefulWidget {
@@ -123,6 +124,7 @@ class _EditPaymentInfoSheetState extends ConsumerState<EditPaymentInfoSheet> {
             TextFormField(
               controller: _bankNameController,
               decoration: const InputDecoration(labelText: '銀行名稱 *'),
+              maxLength: 50,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? '請輸入銀行名稱' : null,
               textInputAction: TextInputAction.next,
@@ -135,6 +137,8 @@ class _EditPaymentInfoSheetState extends ConsumerState<EditPaymentInfoSheet> {
                 hintText: '例：004',
               ),
               keyboardType: TextInputType.number,
+              maxLength: 7,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? '請輸入銀行代碼' : null,
               textInputAction: TextInputAction.next,
@@ -144,6 +148,8 @@ class _EditPaymentInfoSheetState extends ConsumerState<EditPaymentInfoSheet> {
               controller: _accountNumberController,
               decoration: const InputDecoration(labelText: '帳號 *'),
               keyboardType: TextInputType.number,
+              maxLength: 20,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? '請輸入帳號' : null,
               textInputAction: TextInputAction.done,

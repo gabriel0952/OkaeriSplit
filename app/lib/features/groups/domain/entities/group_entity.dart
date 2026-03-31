@@ -34,6 +34,7 @@ class GroupMemberEntity {
     required this.role,
     required this.joinedAt,
     this.isGuest = false,
+    this.claimCode,
   });
 
   final String groupId;
@@ -44,4 +45,6 @@ class GroupMemberEntity {
   final String role;
   final DateTime joinedAt;
   final bool isGuest;
+  /// 訪客邀請碼，僅對群組 owner 可見，認領後為 null。
+  final String? claimCode;
 }

@@ -175,6 +175,28 @@ class _MemberDetailSheetState extends ConsumerState<MemberDetailSheet> {
               onCopy: () => _copyText(member.email!, '信箱'),
             ),
 
+          // 訪客邀請碼（僅 owner 可見且尚未被認領）
+          if (member.isGuest &&
+              widget.canRemove &&
+              member.claimCode != null) ...[
+            const SizedBox(height: 12),
+            _InfoRow(
+              icon: Icons.vpn_key_outlined,
+              label: '訪客代碼',
+              value: member.claimCode!,
+              onCopy: () => _copyText(member.claimCode!, '訪客代碼'),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 34, top: 4),
+              child: Text(
+                '分享此代碼讓訪客認領帳號',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ],
+
           // Payment info
           if (_loadingPaymentInfo)
             const Padding(
